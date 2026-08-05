@@ -316,6 +316,22 @@ async function renderUserDetail(uid) {
   el.innerHTML = '<div class="spinner">Yükleniyor…</div>';
   const { user, coupons, stats } = await api('/users/' + uid);
   const couponsHtml = coupons.length ? coupons.map(couponCard).join('') : '<div class="empty">Bu oyuncu henüz kupon yapmamış.</div>';
+
+  const adminHtml = ME.is_admin ? `
+    <div class="card">
+      <h3>⚙️ Admin İşlemleri</h3>
+      <div class="bet-field" style="margin-bottom:12px">
+        <label>Bakiye düzenle (TL)</label>
+        <div style="display:flex;gap:8px">
+          <input id="adm-balance" type="number" min="0" step="1" value="${Number(user.balance)}" style="flex:1;background:var(--bg);border:1px solid var(--line);color:var(--text);padding:11px;border-radius:8px;font-size:15px" />
+          <button class="btn-sm btn-ok" id="adm-balance-save">Kaydet</button>
+        </div>
+      </div>
+      ${user.id !== ME.id
+        ? '<button class="btn-sm btn-no" id="adm-delete">🗑️ Kullanıcıyı Sil</button>'
+        : '<div style="color:var(--muted);font-size:12px">(Kendi hesabını silemezsin)</div>'}
+    </div>` : '';
+
   el.innerHTML = `
     <button class="btn-ghost" id="back-btn" style="margin-bottom:14px">← Oyuncular</button>
     <div class="card">
@@ -328,9 +344,33 @@ async function renderUserDetail(uid) {
         <span style="color:var(--warn)">Bekleyen: <b>${stats.pending}</b></span>
       </div>
     </div>
+    ${adminHtml}
     <div class="section-title">Kuponları</div>
     ${couponsHtml}`;
+
   $('#back-btn').addEventListener('click', () => render('kullanicilar'));
+
+  if (ME.is_admin) {
+    $('#adm-balance-save').addEventListener('click', async () => {
+      const balance = Number($('#adm-balance').value);
+      if (!Number.isFinite(balance) || balance < 0) return toast('Geçerli bir bakiye girin', true);
+      try {
+        await api(`/admin/users/${uid}/balance`, { method: 'POST', body: { balance } });
+        toast('Bakiye güncellendi ✅');
+        if (Number(uid) === ME.id) await refreshMe();
+        renderUserDetail(uid);
+      } catch (e) { toast(e.message, true); }
+    });
+    const delBtn = $('#adm-delete');
+    if (delBtn) delBtn.addEventListener('click', async () => {
+      if (!confirm(`${user.username} kullanıcısı ve tüm kuponları kalıcı olarak silinecek. Emin misin?`)) return;
+      try {
+        await api(`/admin/users/${uid}/delete`, { method: 'POST' });
+        toast('Kullanıcı silindi');
+        render('kullanicilar');
+      } catch (e) { toast(e.message, true); }
+    });
+  }
 }
 
 // ----- Sonuclar -----

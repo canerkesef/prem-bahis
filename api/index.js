@@ -304,6 +304,21 @@ app.post('/api/admin/users/:id/balance', requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 
+// Admin: kullaniciyi ve tum kuponlarini sil (kendi hesabini silemez)
+app.post('/api/admin/users/:id/delete', requireAdmin, async (req, res) => {
+  try {
+    const targetId = Number(req.params.id);
+    if (targetId === req.user.id) return res.status(400).json({ error: 'Kendi hesabini silemezsin.' });
+    const rows = await sql`SELECT id FROM users WHERE id=${targetId}`;
+    if (rows.length === 0) return res.status(404).json({ error: 'Kullanici bulunamadi.' });
+    await sql.begin(async (tx) => {
+      await tx`DELETE FROM coupons WHERE user_id=${targetId}`;
+      await tx`DELETE FROM users WHERE id=${targetId}`;
+    });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+
 app.post('/api/admin/refresh-matches', requireAdmin, async (req, res) => {
   try {
     const r = await refreshMatches();
