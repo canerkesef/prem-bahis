@@ -102,6 +102,12 @@ async function refreshMatches() {
       WHERE matches.status='open'`;
     count++;
   }
+
+  // Gercek veri geldiyse, uygulama ici ornek maclari (sample-*) temizle.
+  if (count > 0) {
+    await sql`DELETE FROM coupons WHERE match_id LIKE 'sample-%'`;
+    await sql`DELETE FROM matches WHERE id LIKE 'sample-%'`;
+  }
   return { ok: true, count };
 }
 
