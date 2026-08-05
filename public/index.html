@@ -241,7 +241,7 @@ input{font-family:inherit}
 
 // ---------- Yardimcilar ----------
 const $ = (s, el = document) => el.querySelector(s);
-const $ = (s, el = document) => [...el.querySelectorAll(s)];
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 
 async function api(path, opts = {}) {
   const res = await fetch('/api' + path, {
@@ -331,9 +331,9 @@ const STATUS_LABELS = { pending: 'Bekliyor', won: 'Kazandı', lost: 'Kaybetti', 
 let ME = null;
 
 // ---------- Auth ekrani ----------
-$('.tab').forEach((t) =>
+$$('.tab').forEach((t) =>
   t.addEventListener('click', () => {
-    $('.tab').forEach((x) => x.classList.remove('active'));
+    $$('.tab').forEach((x) => x.classList.remove('active'));
     t.classList.add('active');
     const which = t.dataset.authTab;
     $('#login-form').classList.toggle('hidden', which !== 'login');
@@ -390,11 +390,11 @@ function buildNav() {
   $('#nav').innerHTML = items
     .map(([k, l]) => `<button data-view="${k}">${l}</button>`)
     .join('');
-  $('#nav button').forEach((b) => b.addEventListener('click', () => render(b.dataset.view)));
+  $$('#nav button').forEach((b) => b.addEventListener('click', () => render(b.dataset.view)));
 }
 
 function setActiveNav(view) {
-  $('#nav button').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
+  $$('#nav button').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
 }
 
 // ---------- Baslangic ----------
@@ -452,7 +452,7 @@ async function renderBulten(el) {
     `<div class="section-title">Maçlar <small>${matches.length} maç</small></div>` +
     matches.map(matchCard).join('') +
     `<p class="foot-tz">Tüm saatler Türkiye saati ile gösterilmektedir</p>`;
-  $('.odd-btn', el).forEach((b) =>
+  $$('.odd-btn', el).forEach((b) =>
     b.addEventListener('click', () => openBet(b.dataset.mid, b.dataset.market, b.dataset.sel))
   );
 }
@@ -529,7 +529,7 @@ async function openBet(mid, market, sel) {
     potWin.textContent = fmtTL(Math.round(s * odd * 100) / 100);
   };
   stakeInput.addEventListener('input', calc);
-  $('#bet-content .quick button').forEach((q) =>
+  $$('#bet-content .quick button').forEach((q) =>
     q.addEventListener('click', () => {
       stakeInput.value = q.dataset.q;
       calc();
@@ -604,7 +604,7 @@ async function renderKullanicilar(el) {
         </div>`;
       })
       .join('');
-  $('.user-row', el).forEach((r) => r.addEventListener('click', () => renderUserDetail(r.dataset.uid)));
+  $$('.user-row', el).forEach((r) => r.addEventListener('click', () => renderUserDetail(r.dataset.uid)));
 }
 
 async function renderUserDetail(uid) {
@@ -757,14 +757,14 @@ async function renderAdmin(el) {
     </div>`;
 
   // Onay/Red
-  $('[data-approve]', el).forEach((b) =>
+  $$('[data-approve]', el).forEach((b) =>
     b.addEventListener('click', async () => {
       await api(`/admin/users/${b.dataset.approve}/approve`, { method: 'POST' });
       toast('Kullanıcı onaylandı ✅');
       render('admin');
     })
   );
-  $('[data-reject]', el).forEach((b) =>
+  $$('[data-reject]', el).forEach((b) =>
     b.addEventListener('click', async () => {
       await api(`/admin/users/${b.dataset.reject}/reject`, { method: 'POST' });
       toast('Kullanıcı reddedildi');
@@ -798,7 +798,7 @@ async function renderAdmin(el) {
   });
 
   // Elle sonuclandirma
-  $('.settle-form', el).forEach((f) =>
+  $$('.settle-form', el).forEach((f) =>
     f.addEventListener('submit', async (e) => {
       e.preventDefault();
       const hs = Number($('.hs', f).value);
@@ -813,7 +813,7 @@ async function renderAdmin(el) {
       }
     })
   );
-  $('[data-void]', el).forEach((b) =>
+  $$('[data-void]', el).forEach((b) =>
     b.addEventListener('click', async () => {
       try {
         await api(`/admin/matches/${b.dataset.void}/void`, { method: 'POST' });
