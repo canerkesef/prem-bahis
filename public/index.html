@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Prem Bahis — Premier Lig Tahmin Oyunu</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <!-- Giris / Kayit ekrani -->
+  <div id="auth-screen" class="auth-screen">
+    <div class="auth-card">
+      <div class="brand">
+        <span class="brand-logo">⚽</span>
+        <div>
+          <h1>Prem Bahis</h1>
+          <p class="brand-sub">Premier Lig sanal tahmin oyunu</p>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <button class="tab active" data-auth-tab="login">Giriş</button>
+        <button class="tab" data-auth-tab="register">Kayıt Ol</button>
+      </div>
+
+      <form id="login-form" class="auth-form">
+        <input name="username" placeholder="Kullanıcı adı" autocomplete="username" required />
+        <input name="password" type="password" placeholder="Şifre" autocomplete="current-password" required />
+        <button type="submit" class="btn-primary">Giriş Yap</button>
+      </form>
+
+      <form id="register-form" class="auth-form hidden">
+        <input name="username" placeholder="Kullanıcı adı (en az 3 karakter)" required />
+        <input name="password" type="password" placeholder="Şifre (en az 4 karakter)" required />
+        <button type="submit" class="btn-primary">Kayıt Ol</button>
+        <p class="hint">Kayıt sonrası hesabın <b>admin onayı</b> bekler. Onaylanınca giriş yapabilirsin.</p>
+      </form>
+
+      <div id="auth-msg" class="auth-msg"></div>
+    </div>
+    <p class="foot-note">Sanal oyun · Gerçek para yoktur · Sadece arkadaşlar arası eğlence</p>
+  </div>
+
+  <!-- Ana uygulama -->
+  <div id="app" class="app hidden">
+    <header class="topbar">
+      <div class="topbar-brand"><span>⚽</span> Prem Bahis</div>
+      <nav class="nav" id="nav"></nav>
+      <div class="topbar-right">
+        <span class="balance" id="balance">—</span>
+        <span class="user-chip" id="user-chip"></span>
+        <button class="btn-ghost" id="logout-btn">Çıkış</button>
+      </div>
+    </header>
+
+    <main id="view" class="view"></main>
+  </div>
+
+  <!-- Kupon paneli (mac secilince acilir) -->
+  <div id="bet-modal" class="modal hidden">
+    <div class="modal-box">
+      <button class="modal-close" id="bet-close">✕</button>
+      <div id="bet-content"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

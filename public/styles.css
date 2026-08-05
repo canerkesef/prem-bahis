@@ -1,0 +1,132 @@
+:root{
+  --bg:#0b1220; --bg2:#111c31; --card:#16233c; --card2:#1c2c49;
+  --line:#25344f; --text:#eaf0f9; --muted:#8fa3c0;
+  --accent:#25d366; --accent2:#00c2ff; --danger:#ff5470; --warn:#ffb020;
+  --gold:#ffd54a; --radius:14px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:'Segoe UI',system-ui,-apple-system,Roboto,Arial,sans-serif;
+  background:linear-gradient(160deg,#0b1220,#0e1830 60%,#0b1220);
+  color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased;
+}
+.hidden{display:none !important}
+button{font-family:inherit;cursor:pointer}
+input{font-family:inherit}
+
+/* ---------- Auth ---------- */
+.auth-screen{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;gap:14px}
+.auth-card{width:100%;max-width:400px;background:var(--card);border:1px solid var(--line);border-radius:20px;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.45)}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:22px}
+.brand-logo{font-size:40px}
+.brand h1{font-size:24px;letter-spacing:.5px}
+.brand-sub{color:var(--muted);font-size:13px}
+.tabs{display:flex;background:var(--bg);border-radius:12px;padding:4px;margin-bottom:18px}
+.tab{flex:1;border:0;background:transparent;color:var(--muted);padding:10px;border-radius:9px;font-weight:600;font-size:15px}
+.tab.active{background:var(--card2);color:#fff}
+.auth-form{display:flex;flex-direction:column;gap:12px}
+.auth-form input{background:var(--bg);border:1px solid var(--line);color:var(--text);padding:13px 14px;border-radius:10px;font-size:15px}
+.auth-form input:focus{outline:none;border-color:var(--accent2)}
+.btn-primary{background:linear-gradient(90deg,var(--accent),#1db954);color:#04210f;border:0;padding:13px;border-radius:10px;font-weight:700;font-size:16px}
+.btn-primary:active{transform:translateY(1px)}
+.hint{color:var(--muted);font-size:12.5px;line-height:1.5;text-align:center;margin-top:4px}
+.auth-msg{margin-top:14px;font-size:14px;text-align:center;min-height:20px}
+.auth-msg.err{color:var(--danger)}
+.auth-msg.ok{color:var(--accent)}
+.foot-note{color:var(--muted);font-size:12px;text-align:center}
+
+/* ---------- Topbar ---------- */
+.app{max-width:960px;margin:0 auto;padding-bottom:40px}
+.topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;padding:12px 16px;background:rgba(11,18,32,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.topbar-brand{font-weight:800;font-size:18px;display:flex;align-items:center;gap:6px}
+.nav{display:flex;gap:4px;flex:1;overflow-x:auto}
+.nav button{background:transparent;border:0;color:var(--muted);padding:8px 12px;border-radius:9px;font-size:14px;font-weight:600;white-space:nowrap}
+.nav button.active{background:var(--card2);color:#fff}
+.topbar-right{display:flex;align-items:center;gap:10px}
+.balance{background:linear-gradient(90deg,#0e3a24,#12522f);color:var(--gold);font-weight:800;padding:7px 12px;border-radius:20px;font-size:14px;border:1px solid #1c6b3f}
+.user-chip{color:var(--muted);font-size:13px}
+.btn-ghost{background:transparent;border:1px solid var(--line);color:var(--muted);padding:7px 12px;border-radius:9px;font-size:13px}
+
+/* ---------- View ---------- */
+.view{padding:16px}
+.section-title{font-size:16px;font-weight:700;margin:6px 2px 14px;display:flex;align-items:center;gap:8px;justify-content:space-between}
+.section-title small{color:var(--muted);font-weight:500;font-size:12px}
+
+/* ---------- Mac karti ---------- */
+.match{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+.match-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.match-teams{font-weight:700;font-size:15px}
+.match-teams .vs{color:var(--muted);font-weight:500;margin:0 6px}
+.match-time{color:var(--muted);font-size:12px;text-align:right;white-space:nowrap}
+.market{margin-top:10px}
+.market-label{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.odds-row{display:grid;gap:8px}
+.odds-row.c3{grid-template-columns:repeat(3,1fr)}
+.odds-row.c2{grid-template-columns:repeat(2,1fr)}
+.odd-btn{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 6px;text-align:center;color:var(--text);transition:.12s}
+.odd-btn:hover{border-color:var(--accent2)}
+.odd-btn .k{display:block;color:var(--muted);font-size:11px;margin-bottom:3px}
+.odd-btn .v{font-weight:800;font-size:15px;color:var(--gold)}
+.odd-btn.disabled{opacity:.35;pointer-events:none}
+
+/* ---------- Kupon / listeler ---------- */
+.coupon{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--muted);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.coupon.won{border-left-color:var(--accent)}
+.coupon.lost{border-left-color:var(--danger)}
+.coupon.pending{border-left-color:var(--warn)}
+.coupon.void{border-left-color:var(--muted)}
+.coupon-top{display:flex;justify-content:space-between;gap:10px}
+.coupon-teams{font-weight:700;font-size:14px}
+.coupon-pick{color:var(--accent2);font-size:13px;margin-top:3px}
+.coupon-meta{color:var(--muted);font-size:12px;margin-top:6px;display:flex;gap:14px;flex-wrap:wrap}
+.status-badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;height:fit-content}
+.status-badge.won{background:#0e3a24;color:var(--accent)}
+.status-badge.lost{background:#3a1420;color:var(--danger)}
+.status-badge.pending{background:#3a2e10;color:var(--warn)}
+.status-badge.void{background:#26324a;color:var(--muted)}
+
+/* ---------- Kullanici listesi ---------- */
+.user-row{display:flex;align-items:center;justify-content:space-between;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:8px}
+.user-row:hover{border-color:var(--accent2);cursor:pointer}
+.user-left{display:flex;align-items:center;gap:12px}
+.rank{width:26px;height:26px;border-radius:50%;background:var(--card2);display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--muted)}
+.rank.gold{background:#4a3c0e;color:var(--gold)}
+.uname{font-weight:700;font-size:14px}
+.admin-tag{font-size:10px;background:#3a1420;color:var(--danger);padding:2px 6px;border-radius:6px;margin-left:6px;vertical-align:middle}
+.ubalance{color:var(--gold);font-weight:800;font-size:14px}
+
+/* ---------- Admin ---------- */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:14px}
+.card h3{font-size:14px;margin-bottom:12px}
+.row-actions{display:flex;gap:8px}
+.btn-sm{border:0;border-radius:8px;padding:7px 12px;font-size:13px;font-weight:600}
+.btn-ok{background:var(--accent);color:#04210f}
+.btn-no{background:var(--danger);color:#2a0710}
+.btn-blue{background:var(--accent2);color:#04222c}
+.pending-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.pending-row:last-child{border-bottom:0}
+.admin-tools{display:flex;gap:8px;flex-wrap:wrap}
+.settle-form{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.settle-form input{width:52px;background:var(--bg);border:1px solid var(--line);color:var(--text);padding:7px;border-radius:8px;text-align:center}
+
+/* ---------- Modal ---------- */
+.modal{position:fixed;inset:0;background:rgba(3,7,15,.7);display:flex;align-items:flex-end;justify-content:center;z-index:50}
+.modal-box{background:var(--card);border:1px solid var(--line);border-radius:20px 20px 0 0;width:100%;max-width:480px;padding:22px 20px 30px;position:relative;animation:slideUp .2s ease}
+@keyframes slideUp{from{transform:translateY(40px);opacity:.6}to{transform:translateY(0);opacity:1}}
+.modal-close{position:absolute;top:14px;right:14px;background:var(--bg);border:0;color:var(--muted);width:32px;height:32px;border-radius:50%;font-size:15px}
+.bet-teams{font-weight:700;font-size:16px;margin-bottom:2px}
+.bet-pick{color:var(--accent2);font-size:14px;margin-bottom:16px}
+.bet-field{margin-bottom:14px}
+.bet-field label{display:block;color:var(--muted);font-size:12px;margin-bottom:6px}
+.bet-field input{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--text);padding:13px;border-radius:10px;font-size:16px}
+.quick{display:flex;gap:8px;margin-top:8px}
+.quick button{flex:1;background:var(--bg);border:1px solid var(--line);color:var(--muted);padding:8px;border-radius:8px;font-size:13px}
+.bet-summary{display:flex;justify-content:space-between;background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:14px}
+.bet-summary b{color:var(--gold);font-size:16px}
+
+/* ---------- Genel ---------- */
+.empty{text-align:center;color:var(--muted);padding:40px 20px;font-size:14px}
+.spinner{text-align:center;color:var(--muted);padding:30px}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#0e3a24;color:#fff;padding:12px 20px;border-radius:10px;font-size:14px;z-index:100;box-shadow:0 8px 30px rgba(0,0,0,.5);max-width:90%;text-align:center}
+.toast.err{background:#3a1420}
+.info-banner{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.5}

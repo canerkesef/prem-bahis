@@ -1,0 +1,383 @@
+'use strict';
+
+const path = require('path');
+const express = require('express');
+const cookieParser = require('cookie-parser');
+const bcrypt = require('bcryptjs');
+
+const { sql, ensureAdmin } = require('../src/db');
+const { seedSampleMatches } = require('../src/seed');
+const { refreshMatches, refreshResults, hasApi } = require('../src/oddsApi');
+const { settleMatch, voidMatch } = require('../src/settle');
+
+const app = express();
+const SECRET = process.env.SESSION_SECRET || 'lutfen-bu-anahtari-degistir';
+const START_BALANCE = Number(process.env.START_BALANCE || 1000);
+const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+
+app.set('trust proxy', 1);
+app.use(express.json());
+app.use(cookieParser(SECRET));
+
+// -------- Baslangic (instance basina bir kez) --------
+let initPromise = null;
+async function init() {
+  await ensureAdmin();
+  if (!hasApi()) await seedSampleMatches();
+}
+app.use(async (req, res, next) => {
+  try {
+    if (!initPromise) initPromise = init();
+    await initPromise;
+    next();
+  } catch (e) {
+    initPromise = null;
+    console.error('[init] hata:', e.message);
+    res.status(500).json({ error: 'Sunucu/veritabani baslatma hatasi: ' + e.message });
+  }
+});
+
+app.use(express.static(PUBLIC_DIR));
+
+// -------- Yardimcilar --------
+async function currentUser(req) {
+  const uid = req.signedCookies && req.signedCookies.uid;
+  if (!uid) return null;
+  const rows = await sql`SELECT id, username, is_admin, status, balance FROM users WHERE id=${Number(uid)}`;
+  return rows[0] || null;
+}
+async function requireAuth(req, res, next) {
+  try {
+    const u = await currentUser(req);
+    if (!u) return res.status(401).json({ error: 'Giris yapmalisiniz.' });
+    if (u.status !== 'approved') return res.status(403).json({ error: 'Hesabiniz henuz onaylanmadi.' });
+    req.user = { id: Number(u.id), username: u.username, is_admin: !!u.is_admin, balance: Number(u.balance) };
+    next();
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+}
+function requireAdmin(req, res, next) {
+  requireAuth(req, res, () => {
+    if (!req.user.is_admin) return res.status(403).json({ error: 'Yetkiniz yok.' });
+    next();
+  });
+}
+function setLoginCookie(res, id) {
+  res.cookie('uid', String(id), {
+    httpOnly: true,
+    signed: true,
+    sameSite: 'lax',
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+  });
+}
+
+const MARKETS = {
+  '1x2': { '1': 'odd_1', X: 'odd_x', '2': 'odd_2' },
+  ou25: { over: 'odd_over', under: 'odd_under' },
+  btts: { yes: 'odd_btts_yes', no: 'odd_btts_no' },
+};
+
+// ================= AUTH =================
+app.post('/api/register', async (req, res) => {
+  try {
+    const username = String(req.body.username || '').trim();
+    const password = String(req.body.password || '');
+    if (username.length < 3) return res.status(400).json({ error: 'Kullanici adi en az 3 karakter olmali.' });
+    if (password.length < 4) return res.status(400).json({ error: 'Sifre en az 4 karakter olmali.' });
+    const exists = await sql`SELECT id FROM users WHERE username=${username}`;
+    if (exists.length) return res.status(409).json({ error: 'Bu kullanici adi zaten alinmis.' });
+    const hash = bcrypt.hashSync(password, 10);
+    await sql`INSERT INTO users (username, password_hash, status, balance)
+              VALUES (${username}, ${hash}, 'pending', ${START_BALANCE})`;
+    res.json({ ok: true, message: 'Kayit alindi. Admin onayindan sonra giris yapabilirsiniz.' });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+app.post('/api/login', async (req, res) => {
+  try {
+    const username = String(req.body.username || '').trim();
+    const password = String(req.body.password || '');
+    const rows = await sql`SELECT * FROM users WHERE username=${username}`;
+    const user = rows[0];
+    if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+      return res.status(401).json({ error: 'Kullanici adi veya sifre hatali.' });
+    }
+    if (user.status === 'pending') return res.status(403).json({ error: 'Hesabiniz henuz admin tarafindan onaylanmadi.' });
+    if (user.status === 'rejected') return res.status(403).json({ error: 'Hesabiniz reddedilmis.' });
+    setLoginCookie(res, user.id);
+    res.json({ ok: true, user: { id: Number(user.id), username: user.username, is_admin: !!user.is_admin, balance: Number(user.balance) } });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+app.post('/api/logout', (req, res) => {
+  res.clearCookie('uid');
+  res.json({ ok: true });
+});
+
+app.get('/api/me', async (req, res) => {
+  try {
+    const u = await currentUser(req);
+    if (!u) return res.json({ user: null });
+    res.json({ user: { id: Number(u.id), username: u.username, is_admin: !!u.is_admin, status: u.status, balance: Number(u.balance) } });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+// ================= MACLAR =================
+function matchOut(m) {
+  return {
+    id: m.id,
+    home_team: m.home_team,
+    away_team: m.away_team,
+    commence_time: m.commence_time,
+    status: m.status,
+    home_score: m.home_score,
+    away_score: m.away_score,
+    odds: {
+      '1x2': { '1': num(m.odd_1), X: num(m.odd_x), '2': num(m.odd_2) },
+      ou25: { over: num(m.odd_over), under: num(m.odd_under) },
+      btts: { yes: num(m.odd_btts_yes), no: num(m.odd_btts_no) },
+    },
+  };
+}
+function num(v) {
+  return v == null ? null : Number(v);
+}
+
+app.get('/api/matches', requireAuth, async (req, res) => {
+  try {
+    const rows = await sql`SELECT * FROM matches WHERE status='open' ORDER BY commence_time ASC`;
+    res.json({ matches: rows.map(matchOut) });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+app.get('/api/matches/results', requireAuth, async (req, res) => {
+  try {
+    const rows = await sql`SELECT * FROM matches WHERE status IN ('settled','void') ORDER BY commence_time DESC LIMIT 100`;
+    res.json({ matches: rows.map(matchOut) });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+// ================= KUPONLAR =================
+app.post('/api/coupons', requireAuth, async (req, res) => {
+  try {
+    const matchId = String(req.body.match_id || '');
+    const market = String(req.body.market || '');
+    const selection = String(req.body.selection || '');
+    const stake = Number(req.body.stake);
+
+    if (!MARKETS[market] || !MARKETS[market][selection]) {
+      return res.status(400).json({ error: 'Gecersiz bahis secimi.' });
+    }
+    if (!Number.isFinite(stake) || stake <= 0) return res.status(400).json({ error: 'Gecerli bir bahis tutari girin.' });
+
+    const rows = await sql`SELECT * FROM matches WHERE id=${matchId} AND status='open'`;
+    const match = rows[0];
+    if (!match) return res.status(404).json({ error: 'Mac bulunamadi veya bahse kapali.' });
+    if (new Date(match.commence_time).getTime() <= Date.now()) {
+      return res.status(400).json({ error: 'Mac baslamis, bu maca kupon yapilamaz.' });
+    }
+    const oddCol = MARKETS[market][selection];
+    const odd = num(match[oddCol]);
+    if (!odd) return res.status(400).json({ error: 'Bu secim icin oran mevcut degil.' });
+
+    const potentialWin = Math.round(stake * odd * 100) / 100;
+
+    // Bakiye dusme atomik: yeterli bakiye varsa dus, degilse 0 satir etkilenir.
+    let ok = false;
+    await sql.begin(async (tx) => {
+      const upd = await tx`
+        UPDATE users SET balance = balance - ${stake}
+        WHERE id=${req.user.id} AND balance >= ${stake}
+        RETURNING id`;
+      if (upd.length === 0) return; // yetersiz bakiye
+      ok = true;
+      await tx`
+        INSERT INTO coupons (user_id, match_id, home_team, away_team, commence_time,
+          market, selection, odd, stake, potential_win)
+        VALUES (${req.user.id}, ${match.id}, ${match.home_team}, ${match.away_team}, ${match.commence_time},
+          ${market}, ${selection}, ${odd}, ${stake}, ${potentialWin})`;
+    });
+    if (!ok) return res.status(400).json({ error: 'Yetersiz bakiye.' });
+
+    const brows = await sql`SELECT balance FROM users WHERE id=${req.user.id}`;
+    res.json({ ok: true, balance: Number(brows[0].balance) });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+app.get('/api/coupons/mine', requireAuth, async (req, res) => {
+  try {
+    const rows = await sql`SELECT * FROM coupons WHERE user_id=${req.user.id} ORDER BY created_at DESC`;
+    res.json({ coupons: rows.map(couponOut) });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+function couponOut(c) {
+  return {
+    id: Number(c.id),
+    match_id: c.match_id,
+    home_team: c.home_team,
+    away_team: c.away_team,
+    commence_time: c.commence_time,
+    market: c.market,
+    selection: c.selection,
+    odd: num(c.odd),
+    stake: num(c.stake),
+    potential_win: num(c.potential_win),
+    status: c.status,
+    home_score: c.home_score,
+    away_score: c.away_score,
+    created_at: c.created_at,
+  };
+}
+
+// ================= KULLANICILAR =================
+app.get('/api/users', requireAuth, async (req, res) => {
+  try {
+    const rows = await sql`SELECT id, username, is_admin, balance FROM users WHERE status='approved' ORDER BY balance DESC`;
+    res.json({ users: rows.map((u) => ({ id: Number(u.id), username: u.username, is_admin: !!u.is_admin, balance: Number(u.balance) })) });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+app.get('/api/users/:id', requireAuth, async (req, res) => {
+  try {
+    const rows = await sql`SELECT id, username, is_admin, balance, created_at FROM users WHERE id=${Number(req.params.id)} AND status='approved'`;
+    const u = rows[0];
+    if (!u) return res.status(404).json({ error: 'Kullanici bulunamadi.' });
+    const coupons = (await sql`SELECT * FROM coupons WHERE user_id=${Number(u.id)} ORDER BY created_at DESC`).map(couponOut);
+    const stats = coupons.reduce(
+      (a, c) => {
+        a.total++;
+        if (c.status === 'won') a.won++;
+        else if (c.status === 'lost') a.lost++;
+        else if (c.status === 'pending') a.pending++;
+        return a;
+      },
+      { total: 0, won: 0, lost: 0, pending: 0 }
+    );
+    res.json({ user: { id: Number(u.id), username: u.username, is_admin: !!u.is_admin, balance: Number(u.balance), created_at: u.created_at }, coupons, stats });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+// ================= ADMIN =================
+app.get('/api/admin/pending', requireAdmin, async (req, res) => {
+  try {
+    const rows = await sql`SELECT id, username, created_at FROM users WHERE status='pending' ORDER BY created_at ASC`;
+    res.json({ pending: rows.map((u) => ({ id: Number(u.id), username: u.username, created_at: u.created_at })) });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+app.post('/api/admin/users/:id/approve', requireAdmin, async (req, res) => {
+  try { await sql`UPDATE users SET status='approved' WHERE id=${Number(req.params.id)}`; res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+app.post('/api/admin/users/:id/reject', requireAdmin, async (req, res) => {
+  try { await sql`UPDATE users SET status='rejected' WHERE id=${Number(req.params.id)}`; res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+app.post('/api/admin/users/:id/balance', requireAdmin, async (req, res) => {
+  try {
+    const balance = Number(req.body.balance);
+    if (!Number.isFinite(balance) || balance < 0) return res.status(400).json({ error: 'Gecersiz bakiye.' });
+    await sql`UPDATE users SET balance=${balance} WHERE id=${Number(req.params.id)}`;
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+
+app.post('/api/admin/refresh-matches', requireAdmin, async (req, res) => {
+  try {
+    const r = await refreshMatches();
+    if (!r.ok) return res.status(400).json(r);
+    res.json(r);
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+
+app.post('/api/admin/refresh-results', requireAdmin, async (req, res) => {
+  try {
+    const r = await refreshResults((id, h, a) => settleMatch(id, h, a));
+    if (!r.ok) return res.status(400).json(r);
+    res.json(r);
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+
+app.post('/api/admin/matches/:id/settle', requireAdmin, async (req, res) => {
+  const h = Number(req.body.home_score);
+  const a = Number(req.body.away_score);
+  if (!Number.isInteger(h) || !Number.isInteger(a) || h < 0 || a < 0) {
+    return res.status(400).json({ error: 'Gecerli skor girin (0 veya uzeri tam sayi).' });
+  }
+  try { res.json(await settleMatch(req.params.id, h, a)); }
+  catch (e) { res.status(400).json({ error: String(e.message || e) }); }
+});
+
+app.post('/api/admin/matches/:id/void', requireAdmin, async (req, res) => {
+  try { res.json(await voidMatch(req.params.id)); }
+  catch (e) { res.status(400).json({ error: String(e.message || e) }); }
+});
+
+app.post('/api/admin/matches', requireAdmin, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const home = String(b.home_team || '').trim();
+    const away = String(b.away_team || '').trim();
+    const commence = String(b.commence_time || '').trim();
+    if (!home || !away || !commence) return res.status(400).json({ error: 'Ev sahibi, deplasman ve tarih zorunlu.' });
+    const id = 'manual-' + Date.now();
+    await sql`
+      INSERT INTO matches (id, home_team, away_team, commence_time, status,
+        odd_1, odd_x, odd_2, odd_over, odd_under, odd_btts_yes, odd_btts_no)
+      VALUES (${id}, ${home}, ${away}, ${commence}, 'open',
+        ${Number(b.odd_1) || null}, ${Number(b.odd_x) || null}, ${Number(b.odd_2) || null},
+        ${Number(b.odd_over) || null}, ${Number(b.odd_under) || null},
+        ${Number(b.odd_btts_yes) || null}, ${Number(b.odd_btts_no) || null})`;
+    res.json({ ok: true, id });
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+
+// ================= CRON (Vercel gunluk otomatik guncelleme) =================
+app.all('/api/cron/refresh', async (req, res) => {
+  const secret = process.env.CRON_SECRET || '';
+  if (!secret) return res.status(503).json({ error: 'CRON_SECRET tanimli degil.' });
+  if (req.headers.authorization !== `Bearer ${secret}`) return res.status(401).json({ error: 'Yetkisiz.' });
+  try {
+    const m = await refreshMatches();
+    const r = await refreshResults((id, h, a) => settleMatch(id, h, a));
+    res.json({ ok: true, matches: m.count ?? null, settled: r.settled ?? null });
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+
+// Tum diger istekler -> arayuz
+app.get('*', (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
+});
+
+// Yerelde dogrudan calistirilinca dinle; Vercel'de app export edilir.
+if (require.main === module) {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`Prem Bahis calisiyor -> http://localhost:${PORT}`);
+    console.log(hasApi() ? '[mod] Canli veri (The Odds API) aktif.' : '[mod] Ornek mac modu (API anahtari yok).');
+  });
+}
+
+module.exports = app;

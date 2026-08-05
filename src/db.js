@@ -1,0 +1,48 @@
+'use strict';
+
+// Supabase (Postgres) baglantisi. Serverless (Vercel) ortaminda calisir.
+// DATABASE_URL: Supabase "Connection Pooling" (Transaction, port 6543) URL'i olmali.
+const postgres = require('postgres');
+const bcrypt = require('bcryptjs');
+
+const connectionString = process.env.DATABASE_URL || '';
+if (!connectionString) {
+  console.warn('[db] UYARI: DATABASE_URL tanimli degil.');
+}
+
+// prepare:false -> Supabase transaction pooler (pgbouncer) ile uyumluluk icin sart.
+// (numeric alanlar string donebilir; sunucu tarafinda para hesaplari SQL icinde,
+//  arayuze giden degerler Number() ile sayiya cevriliyor.)
+const isLocal = connectionString.includes('localhost') || connectionString.includes('127.0.0.1');
+const sql = postgres(connectionString, {
+  prepare: false,
+  ssl: isLocal ? false : 'require',
+  max: 3,
+  idle_timeout: 20,
+});
+
+// Admin hesabini bir kez olusturur (instance basina memoize edilir).
+let adminReady = null;
+function ensureAdmin() {
+  if (adminReady) return adminReady;
+  adminReady = (async () => {
+    const username = process.env.ADMIN_USERNAME || 'admin';
+    const password = process.env.ADMIN_PASSWORD || 'admin1234';
+    const startBalance = Number(process.env.START_BALANCE || 1000);
+    const rows = await sql`SELECT id FROM users WHERE username = ${username}`;
+    if (rows.length === 0) {
+      const hash = bcrypt.hashSync(password, 10);
+      await sql`
+        INSERT INTO users (username, password_hash, is_admin, status, balance)
+        VALUES (${username}, ${hash}, true, 'approved', ${startBalance})
+        ON CONFLICT (username) DO NOTHING`;
+      console.log(`[db] Admin hesabi hazir -> kullanici: ${username}`);
+    }
+  })().catch((e) => {
+    adminReady = null; // hata olursa tekrar denensin
+    throw e;
+  });
+  return adminReady;
+}
+
+module.exports = { sql, ensureAdmin };
