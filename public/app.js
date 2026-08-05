@@ -18,9 +18,61 @@ async function api(path, opts = {}) {
 function fmtTL(n) {
   return Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' TL';
 }
+const TZ = 'Europe/Istanbul';
 function fmtDate(iso) {
   const d = new Date(iso);
-  return d.toLocaleString('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleString('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: TZ });
+}
+function fmtKick(iso) {
+  const d = new Date(iso);
+  return {
+    day: d.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', timeZone: TZ }),
+    time: d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', timeZone: TZ }),
+  };
+}
+
+// Takim renkleri (arma rozeti icin). Bulunamazsa isimden uretilir.
+const TEAM_COLORS = {
+  'arsenal': ['#EF0107', 'ARS'], 'aston villa': ['#95BFE5', 'AVL'], 'bournemouth': ['#DA291C', 'BOU'],
+  'brentford': ['#E30613', 'BRE'], 'brighton': ['#0057B8', 'BHA'], 'burnley': ['#6C1D45', 'BUR'],
+  'chelsea': ['#034694', 'CHE'], 'crystal palace': ['#1B458F', 'CRY'], 'everton': ['#003399', 'EVE'],
+  'fulham': ['#111111', 'FUL'], 'ipswich': ['#3A64A3', 'IPS'], 'leeds': ['#1D428A', 'LEE'],
+  'leicester': ['#003090', 'LEI'], 'liverpool': ['#C8102E', 'LIV'], 'luton': ['#F78F1E', 'LUT'],
+  'manchester city': ['#6CABDD', 'MCI'], 'manchester united': ['#DA291C', 'MUN'], 'newcastle': ['#241F20', 'NEW'],
+  'nottingham forest': ['#DD0000', 'NFO'], 'sheffield': ['#EE2737', 'SHU'], 'southampton': ['#D71920', 'SOU'],
+  'tottenham': ['#132257', 'TOT'], 'west ham': ['#7A263A', 'WHU'], 'wolverhampton': ['#FDB913', 'WOL'],
+  'wolves': ['#FDB913', 'WOL'], 'sunderland': ['#EB172B', 'SUN'], 'hull': ['#F5A12D', 'HUL'],
+  'coventry': ['#78D0F1', 'COV'],
+};
+function hashColor(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = s.charCodeAt(i) + ((h << 5) - h);
+  return `hsl(${Math.abs(h) % 360}, 55%, 42%)`;
+}
+function pickFg(bg) {
+  if (bg.startsWith('#')) {
+    const r = parseInt(bg.slice(1, 3), 16), g = parseInt(bg.slice(3, 5), 16), b = parseInt(bg.slice(5, 7), 16);
+    const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return lum > 0.62 ? '#1c1930' : '#ffffff';
+  }
+  return '#ffffff';
+}
+function teamCrest(name) {
+  const lower = (name || '').toLowerCase();
+  for (const key of Object.keys(TEAM_COLORS)) {
+    if (lower.includes(key)) {
+      const [bg, code] = TEAM_COLORS[key];
+      return { bg, fg: pickFg(bg), code };
+    }
+  }
+  const words = lower.split(/\s+/).filter(Boolean);
+  const code = (words.length >= 2 ? words[0][0] + words[1][0] + (words[0][1] || '') : (name || '').slice(0, 3)).toUpperCase();
+  const bg = hashColor(lower);
+  return { bg, fg: '#ffffff', code };
+}
+function crestEl(name) {
+  const c = teamCrest(name);
+  return `<span class="crest" style="background:${c.bg};color:${c.fg}">${c.code}</span>`;
 }
 function toast(msg, isErr = false) {
   const t = $('#toast');
@@ -158,8 +210,9 @@ async function renderBulten(el) {
     return;
   }
   el.innerHTML =
-    `<div class="section-title">Bülten <small>${matches.length} maç</small></div>` +
-    matches.map(matchCard).join('');
+    `<div class="section-title">Maçlar <small>${matches.length} maç</small></div>` +
+    matches.map(matchCard).join('') +
+    `<p class="foot-tz">Tüm saatler Türkiye saati ile gösterilmektedir</p>`;
   $$('.odd-btn', el).forEach((b) =>
     b.addEventListener('click', () => openBet(b.dataset.mid, b.dataset.market, b.dataset.sel))
   );
@@ -173,10 +226,14 @@ function oddBtn(mid, market, sel, label, odd) {
 
 function matchCard(m) {
   const o = m.odds;
+  const k = fmtKick(m.commence_time);
   return `<div class="match">
-    <div class="match-head">
-      <div class="match-teams">${m.home_team}<span class="vs">vs</span>${m.away_team}</div>
-      <div class="match-time">${fmtDate(m.commence_time)}</div>
+    <div class="fixture">
+      <div class="teams-col">
+        <div class="team-row">${crestEl(m.home_team)}<span class="team-name">${m.home_team}</span></div>
+        <div class="team-row">${crestEl(m.away_team)}<span class="team-name">${m.away_team}</span></div>
+      </div>
+      <div class="kick"><b>${k.day}</b>${k.time}</div>
     </div>
     <div class="market">
       <div class="market-label">Maç Sonucu</div>
@@ -387,11 +444,14 @@ async function renderSonuclar(el) {
         const voided = m.status === 'void';
         const score = voided ? 'İPTAL' : `${m.home_score} - ${m.away_score}`;
         return `<div class="match">
-          <div class="match-head">
-            <div class="match-teams">${m.home_team}<span class="vs">vs</span>${m.away_team}</div>
-            <div class="match-time">${fmtDate(m.commence_time)}</div>
+          <div class="fixture">
+            <div class="teams-col">
+              <div class="team-row">${crestEl(m.home_team)}<span class="team-name">${m.home_team}</span></div>
+              <div class="team-row">${crestEl(m.away_team)}<span class="team-name">${m.away_team}</span></div>
+            </div>
+            <div class="kick" style="font-size:20px;font-weight:800;color:${voided ? 'var(--muted)' : 'var(--pri)'}">${score}</div>
           </div>
-          <div style="text-align:center;font-size:22px;font-weight:800;color:${voided ? 'var(--muted)' : 'var(--gold)'}">${score}</div>
+          <div class="market-label" style="margin-top:8px">${fmtDate(m.commence_time)}</div>
         </div>`;
       })
       .join('');
