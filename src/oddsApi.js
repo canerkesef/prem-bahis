@@ -88,6 +88,9 @@ async function refreshMatches() {
     if (!row.odd_1 || !row.odd_2) continue;
 
     const ex = computeExtraOdds(row);
+    // KG (btts) API'den gelmezse turetilmis degeri kullan
+    const bttsYes = row.odd_btts_yes || ex.odd_btts_yes;
+    const bttsNo = row.odd_btts_no || ex.odd_btts_no;
     await sql`
       INSERT INTO matches (id, home_team, away_team, commence_time, status,
         odd_1, odd_x, odd_2, odd_over, odd_under, odd_btts_yes, odd_btts_no,
@@ -95,7 +98,7 @@ async function refreshMatches() {
         odd_odd, odd_even, odd_h1, odd_hx, odd_h2, last_update)
       VALUES (${row.id}, ${row.home}, ${row.away}, ${row.commence}, 'open',
         ${row.odd_1}, ${row.odd_x}, ${row.odd_2}, ${row.odd_over}, ${row.odd_under},
-        ${row.odd_btts_yes}, ${row.odd_btts_no},
+        ${bttsYes}, ${bttsNo},
         ${ex.odd_dc_1x}, ${ex.odd_dc_12}, ${ex.odd_dc_x2}, ${ex.odd_over15}, ${ex.odd_under15},
         ${ex.odd_over35}, ${ex.odd_under35}, ${ex.odd_odd}, ${ex.odd_even},
         ${ex.odd_h1}, ${ex.odd_hx}, ${ex.odd_h2}, now())

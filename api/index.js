@@ -381,7 +381,7 @@ app.post('/api/admin/matches', requireAdmin, async (req, res) => {
         odd_odd, odd_even, odd_h1, odd_hx, odd_h2)
       VALUES (${id}, ${home}, ${away}, ${commence}, 'open',
         ${base.odd_1}, ${base.odd_x}, ${base.odd_2}, ${base.odd_over}, ${base.odd_under},
-        ${Number(b.odd_btts_yes) || null}, ${Number(b.odd_btts_no) || null},
+        ${Number(b.odd_btts_yes) || ex.odd_btts_yes}, ${Number(b.odd_btts_no) || ex.odd_btts_no},
         ${ex.odd_dc_1x}, ${ex.odd_dc_12}, ${ex.odd_dc_x2}, ${ex.odd_over15}, ${ex.odd_under15},
         ${ex.odd_over35}, ${ex.odd_under35}, ${ex.odd_odd}, ${ex.odd_even},
         ${ex.odd_h1}, ${ex.odd_hx}, ${ex.odd_h2})`;

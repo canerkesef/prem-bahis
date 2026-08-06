@@ -39,9 +39,10 @@ function computeExtraOdds(base) {
   out.odd_odd = price(0.495);
   // Alt/Ust 1.5 ve 3.5, 2.5 cizgisinden tahmini
   const oo = base.odd_over, ou = base.odd_under;
+  let Pover25 = null;
   if (oo && ou) {
     const rO = 1 / oo, rU = 1 / ou;
-    const Pover25 = rO / (rO + rU);
+    Pover25 = rO / (rO + rU);
     const Pover15 = Math.min(0.97, Math.max(0.5, Pover25 + 0.24));
     const Pover35 = Math.max(0.05, Math.min(0.5, Pover25 - 0.24));
     out.odd_over15 = price(Pover15);
@@ -49,6 +50,11 @@ function computeExtraOdds(base) {
     out.odd_over35 = price(Pover35);
     out.odd_under35 = price(1 - Pover35);
   }
+  // Karsilikli Gol (KG Var/Yok): 2.5 ust olasiligindan tahmin.
+  // API'den gelmezse bu deger yedek olarak kullanilir.
+  const Pbtts = Pover25 != null ? Math.min(0.75, Math.max(0.3, 0.3 + 0.55 * Pover25)) : 0.52;
+  out.odd_btts_yes = price(Pbtts);
+  out.odd_btts_no = price(1 - Pbtts);
   return out;
 }
 
