@@ -162,6 +162,36 @@ input{font-family:inherit}
 .panel-head{display:flex;align-items:center;gap:12px;padding-right:34px;margin-bottom:10px;padding-bottom:12px;border-bottom:1px solid var(--line)}
 .panel-head .teams-col{flex:1;display:flex;flex-direction:column;gap:8px}
 
+/* Masaustunde sekme ikonlari gizli (sadece yazi) */
+.nav button .ic{display:none}
+
+/* ---------- MOBIL: sekmeler alta sabit menu (web gorunumu degismez) ---------- */
+@media (max-width:640px){
+  .topbar{flex-wrap:nowrap;gap:8px;padding:10px 12px;backdrop-filter:none;-webkit-backdrop-filter:none}
+  .topbar-brand{flex:1;min-width:0}
+  .brand-name{font-size:16px}
+  .user-chip{display:none}
+  .balance{font-size:12.5px;padding:6px 11px}
+
+  #nav{
+    position:fixed;left:0;right:0;bottom:0;top:auto;flex:none;
+    display:flex;justify-content:space-around;gap:0;overflow:visible;
+    background:#fff;border-top:1px solid var(--line);
+    box-shadow:0 -4px 16px rgba(28,25,48,.07);z-index:40;
+    padding:6px 4px;padding-bottom:calc(6px + env(safe-area-inset-bottom));
+  }
+  #nav button{
+    flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+    background:transparent;border:0;border-radius:10px;padding:5px 2px;color:var(--muted);font-weight:600;
+  }
+  #nav button.active{background:transparent;color:var(--pri)}
+  #nav button .ic{display:block;font-size:19px;line-height:1}
+  #nav button .lb{font-size:10.5px;white-space:nowrap}
+
+  .app{padding-bottom:74px}
+  .toast{bottom:84px}
+}
+
 </style>
 </head>
 <body>
@@ -418,14 +448,14 @@ $('#logout-btn').addEventListener('click', async () => {
 const VIEWS = ['bulten', 'kuponlarim', 'kullanicilar', 'sonuclar'];
 function buildNav() {
   const items = [
-    ['bulten', 'Bülten'],
-    ['kuponlarim', 'Kuponlarım'],
-    ['kullanicilar', 'Oyuncular'],
-    ['sonuclar', 'Sonuçlar'],
+    ['bulten', 'Bülten', '⚽'],
+    ['kuponlarim', 'Kuponlarım', '🧾'],
+    ['kullanicilar', 'Oyuncular', '👥'],
+    ['sonuclar', 'Sonuçlar', '🏁'],
   ];
-  if (ME.is_admin) items.push(['admin', 'Admin']);
+  if (ME.is_admin) items.push(['admin', 'Admin', '⚙️']);
   $('#nav').innerHTML = items
-    .map(([k, l]) => `<button data-view="${k}">${l}</button>`)
+    .map(([k, l, ic]) => `<button data-view="${k}"><span class="ic">${ic}</span><span class="lb">${l}</span></button>`)
     .join('');
   $$('#nav button').forEach((b) => b.addEventListener('click', () => render(b.dataset.view)));
 }

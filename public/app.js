@@ -156,14 +156,14 @@ $('#logout-btn').addEventListener('click', async () => {
 const VIEWS = ['bulten', 'kuponlarim', 'kullanicilar', 'sonuclar'];
 function buildNav() {
   const items = [
-    ['bulten', 'Bülten'],
-    ['kuponlarim', 'Kuponlarım'],
-    ['kullanicilar', 'Oyuncular'],
-    ['sonuclar', 'Sonuçlar'],
+    ['bulten', 'Bülten', '⚽'],
+    ['kuponlarim', 'Kuponlarım', '🧾'],
+    ['kullanicilar', 'Oyuncular', '👥'],
+    ['sonuclar', 'Sonuçlar', '🏁'],
   ];
-  if (ME.is_admin) items.push(['admin', 'Admin']);
+  if (ME.is_admin) items.push(['admin', 'Admin', '⚙️']);
   $('#nav').innerHTML = items
-    .map(([k, l]) => `<button data-view="${k}">${l}</button>`)
+    .map(([k, l, ic]) => `<button data-view="${k}"><span class="ic">${ic}</span><span class="lb">${l}</span></button>`)
     .join('');
   $$('#nav button').forEach((b) => b.addEventListener('click', () => render(b.dataset.view)));
 }
