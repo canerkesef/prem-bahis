@@ -238,20 +238,35 @@ function oddBtn(mid, market, sel, label, odd) {
     <span class="k">${label}</span><span class="v">${odd ? Number(odd).toFixed(2) : '-'}</span></div>`;
 }
 
-// Bultende kompakt, tiklanabilir mac satiri
+// Bultende kompakt mac satiri. Mac basladiysa oranlar yerine CANLI rozeti.
 function matchCard(m) {
   const o = m.odds;
   const k = fmtKick(m.commence_time);
   const oneline = (v) => (v ? Number(v).toFixed(2) : '-');
-  return `<div class="match match-lite" data-mid="${m.id}">
+  const started = new Date(m.commence_time).getTime() <= Date.now();
+
+  const fixture = `
     <div class="fixture">
       <div class="teams-col">
         <div class="team-row">${crestEl(m.home_team)}<span class="team-name">${m.home_team}</span></div>
         <div class="team-row">${crestEl(m.away_team)}<span class="team-name">${m.away_team}</span></div>
       </div>
       <div class="kick"><b>${k.day}</b>${k.time}</div>
-      <span class="chev">›</span>
-    </div>
+      ${started ? '' : '<span class="chev">›</span>'}
+    </div>`;
+
+  if (started) {
+    return `<div class="match match-live">
+      ${fixture}
+      <div class="live-row">
+        <span class="live-badge"><span class="live-dot"></span>CANLI</span>
+        <span class="live-note">Maç başladı · bahisler kapandı</span>
+      </div>
+    </div>`;
+  }
+
+  return `<div class="match match-lite" data-mid="${m.id}">
+    ${fixture}
     <div class="lite-ms">
       <span class="ms-pill"><i>1</i>${oneline(o['1x2']['1'])}</span>
       <span class="ms-pill"><i>X</i>${oneline(o['1x2'].X)}</span>
