@@ -226,9 +226,9 @@ async function renderBulten(el) {
   el.innerHTML =
     `<div class="section-title">Maçlar <small>${matches.length} maç</small></div>` +
     matches.map(matchCard).join('') +
-    `<p class="foot-tz">Tüm saatler Türkiye saati ile gösterilmektedir</p>`;
-  $$('.odd-btn', el).forEach((b) =>
-    b.addEventListener('click', () => openBet(b.dataset.mid, b.dataset.market, b.dataset.sel))
+    `<p class="foot-tz">Tüm saatler Türkiye saati ile gösterilmektedir · Maça dokun, oranlar açılsın</p>`;
+  $$('.match-lite', el).forEach((row) =>
+    row.addEventListener('click', () => openMatchPanel(row.dataset.mid))
   );
 }
 
@@ -238,17 +238,33 @@ function oddBtn(mid, market, sel, label, odd) {
     <span class="k">${label}</span><span class="v">${odd ? Number(odd).toFixed(2) : '-'}</span></div>`;
 }
 
+// Bultende kompakt, tiklanabilir mac satiri
 function matchCard(m) {
   const o = m.odds;
   const k = fmtKick(m.commence_time);
-  return `<div class="match">
+  const oneline = (v) => (v ? Number(v).toFixed(2) : '-');
+  return `<div class="match match-lite" data-mid="${m.id}">
     <div class="fixture">
       <div class="teams-col">
         <div class="team-row">${crestEl(m.home_team)}<span class="team-name">${m.home_team}</span></div>
         <div class="team-row">${crestEl(m.away_team)}<span class="team-name">${m.away_team}</span></div>
       </div>
       <div class="kick"><b>${k.day}</b>${k.time}</div>
+      <span class="chev">›</span>
     </div>
+    <div class="lite-ms">
+      <span class="ms-pill"><i>1</i>${oneline(o['1x2']['1'])}</span>
+      <span class="ms-pill"><i>X</i>${oneline(o['1x2'].X)}</span>
+      <span class="ms-pill"><i>2</i>${oneline(o['1x2']['2'])}</span>
+      <span class="ms-more">+7 seçenek ›</span>
+    </div>
+  </div>`;
+}
+
+// Panelde gosterilecek tum bahis pazarlari
+function marketsHtml(m) {
+  const o = m.odds;
+  return `
     <div class="market">
       <div class="market-label">Maç Sonucu</div>
       <div class="odds-row c3">
@@ -307,8 +323,34 @@ function matchCard(m) {
         ${oddBtn(m.id, 'oe', 'odd', 'Tek', o.oe.odd)}
         ${oddBtn(m.id, 'oe', 'even', 'Çift', o.oe.even)}
       </div>
+    </div>`;
+}
+
+// Maca tiklayinca acilan (asagidan kayan) oran paneli
+async function openMatchPanel(mid) {
+  const { matches } = await api('/matches');
+  const m = matches.find((x) => x.id === mid);
+  if (!m) return toast('Maç bulunamadı', true);
+  const k = fmtKick(m.commence_time);
+  $('#match-content').innerHTML = `
+    <div class="panel-head">
+      <div class="teams-col">
+        <div class="team-row">${crestEl(m.home_team)}<span class="team-name">${m.home_team}</span></div>
+        <div class="team-row">${crestEl(m.away_team)}<span class="team-name">${m.away_team}</span></div>
+      </div>
+      <div class="kick"><b>${k.day}</b>${k.time}</div>
     </div>
-  </div>`;
+    ${marketsHtml(m)}`;
+  $$('#match-content .odd-btn').forEach((b) =>
+    b.addEventListener('click', () => {
+      closeMatchPanel();
+      openBet(b.dataset.mid, b.dataset.market, b.dataset.sel);
+    })
+  );
+  $('#match-modal').classList.remove('hidden');
+}
+function closeMatchPanel() {
+  $('#match-modal').classList.add('hidden');
 }
 
 // ----- Kupon paneli -----
@@ -368,6 +410,10 @@ function closeBet() {
 $('#bet-close').addEventListener('click', closeBet);
 $('#bet-modal').addEventListener('click', (e) => {
   if (e.target.id === 'bet-modal') closeBet();
+});
+$('#match-close').addEventListener('click', closeMatchPanel);
+$('#match-modal').addEventListener('click', (e) => {
+  if (e.target.id === 'match-modal') closeMatchPanel();
 });
 
 // ----- Kuponlarim -----

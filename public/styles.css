@@ -139,3 +139,18 @@ input{font-family:inherit}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--pri);color:#fff;padding:12px 20px;border-radius:10px;font-size:14px;z-index:100;box-shadow:0 8px 30px rgba(28,25,48,.3);max-width:90%;text-align:center}
 .toast.err{background:var(--danger)}
 .info-banner{background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.5}
+
+/* ---------- Kompakt mac satiri (tiklanabilir) ---------- */
+.match-lite{cursor:pointer;transition:.12s}
+.match-lite:hover{border-color:var(--pri2);box-shadow:0 4px 16px rgba(61,25,91,.1)}
+.match-lite .fixture{position:relative}
+.chev{color:var(--muted);font-size:26px;line-height:1;margin-left:4px;font-weight:400}
+.lite-ms{display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap}
+.ms-pill{display:flex;align-items:center;gap:8px;background:var(--soft);border:1px solid var(--line);border-radius:9px;padding:7px 12px;font-weight:800;font-size:14px;color:var(--pri)}
+.ms-pill i{color:var(--muted);font-style:normal;font-weight:600;font-size:12px}
+.ms-more{margin-left:auto;color:var(--pri2);font-size:12.5px;font-weight:700;white-space:nowrap}
+
+/* ---------- Oran paneli (asagidan kayan) ---------- */
+.modal-box.tall{max-height:88vh;overflow-y:auto}
+.panel-head{display:flex;align-items:center;gap:12px;padding-right:34px;margin-bottom:10px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.panel-head .teams-col{flex:1;display:flex;flex-direction:column;gap:8px}

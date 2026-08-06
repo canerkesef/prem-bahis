@@ -147,6 +147,21 @@ input{font-family:inherit}
 .toast.err{background:var(--danger)}
 .info-banner{background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.5}
 
+/* ---------- Kompakt mac satiri (tiklanabilir) ---------- */
+.match-lite{cursor:pointer;transition:.12s}
+.match-lite:hover{border-color:var(--pri2);box-shadow:0 4px 16px rgba(61,25,91,.1)}
+.match-lite .fixture{position:relative}
+.chev{color:var(--muted);font-size:26px;line-height:1;margin-left:4px;font-weight:400}
+.lite-ms{display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap}
+.ms-pill{display:flex;align-items:center;gap:8px;background:var(--soft);border:1px solid var(--line);border-radius:9px;padding:7px 12px;font-weight:800;font-size:14px;color:var(--pri)}
+.ms-pill i{color:var(--muted);font-style:normal;font-weight:600;font-size:12px}
+.ms-more{margin-left:auto;color:var(--pri2);font-size:12.5px;font-weight:700;white-space:nowrap}
+
+/* ---------- Oran paneli (asagidan kayan) ---------- */
+.modal-box.tall{max-height:88vh;overflow-y:auto}
+.panel-head{display:flex;align-items:center;gap:12px;padding-right:34px;margin-bottom:10px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.panel-head .teams-col{flex:1;display:flex;flex-direction:column;gap:8px}
+
 </style>
 </head>
 <body>
@@ -224,6 +239,14 @@ input{font-family:inherit}
     </header>
 
     <main id="view" class="view"></main>
+  </div>
+
+  <!-- Mac oran paneli (asagidan kayar) -->
+  <div id="match-modal" class="modal hidden">
+    <div class="modal-box tall">
+      <button class="modal-close" id="match-close">✕</button>
+      <div id="match-content"></div>
+    </div>
   </div>
 
   <!-- Kupon paneli -->
@@ -465,9 +488,9 @@ async function renderBulten(el) {
   el.innerHTML =
     `<div class="section-title">Maçlar <small>${matches.length} maç</small></div>` +
     matches.map(matchCard).join('') +
-    `<p class="foot-tz">Tüm saatler Türkiye saati ile gösterilmektedir</p>`;
-  $$('.odd-btn', el).forEach((b) =>
-    b.addEventListener('click', () => openBet(b.dataset.mid, b.dataset.market, b.dataset.sel))
+    `<p class="foot-tz">Tüm saatler Türkiye saati ile gösterilmektedir · Maça dokun, oranlar açılsın</p>`;
+  $$('.match-lite', el).forEach((row) =>
+    row.addEventListener('click', () => openMatchPanel(row.dataset.mid))
   );
 }
 
@@ -477,17 +500,33 @@ function oddBtn(mid, market, sel, label, odd) {
     <span class="k">${label}</span><span class="v">${odd ? Number(odd).toFixed(2) : '-'}</span></div>`;
 }
 
+// Bultende kompakt, tiklanabilir mac satiri
 function matchCard(m) {
   const o = m.odds;
   const k = fmtKick(m.commence_time);
-  return `<div class="match">
+  const oneline = (v) => (v ? Number(v).toFixed(2) : '-');
+  return `<div class="match match-lite" data-mid="${m.id}">
     <div class="fixture">
       <div class="teams-col">
         <div class="team-row">${crestEl(m.home_team)}<span class="team-name">${m.home_team}</span></div>
         <div class="team-row">${crestEl(m.away_team)}<span class="team-name">${m.away_team}</span></div>
       </div>
       <div class="kick"><b>${k.day}</b>${k.time}</div>
+      <span class="chev">›</span>
     </div>
+    <div class="lite-ms">
+      <span class="ms-pill"><i>1</i>${oneline(o['1x2']['1'])}</span>
+      <span class="ms-pill"><i>X</i>${oneline(o['1x2'].X)}</span>
+      <span class="ms-pill"><i>2</i>${oneline(o['1x2']['2'])}</span>
+      <span class="ms-more">+7 seçenek ›</span>
+    </div>
+  </div>`;
+}
+
+// Panelde gosterilecek tum bahis pazarlari
+function marketsHtml(m) {
+  const o = m.odds;
+  return `
     <div class="market">
       <div class="market-label">Maç Sonucu</div>
       <div class="odds-row c3">
@@ -546,8 +585,34 @@ function matchCard(m) {
         ${oddBtn(m.id, 'oe', 'odd', 'Tek', o.oe.odd)}
         ${oddBtn(m.id, 'oe', 'even', 'Çift', o.oe.even)}
       </div>
+    </div>`;
+}
+
+// Maca tiklayinca acilan (asagidan kayan) oran paneli
+async function openMatchPanel(mid) {
+  const { matches } = await api('/matches');
+  const m = matches.find((x) => x.id === mid);
+  if (!m) return toast('Maç bulunamadı', true);
+  const k = fmtKick(m.commence_time);
+  $('#match-content').innerHTML = `
+    <div class="panel-head">
+      <div class="teams-col">
+        <div class="team-row">${crestEl(m.home_team)}<span class="team-name">${m.home_team}</span></div>
+        <div class="team-row">${crestEl(m.away_team)}<span class="team-name">${m.away_team}</span></div>
+      </div>
+      <div class="kick"><b>${k.day}</b>${k.time}</div>
     </div>
-  </div>`;
+    ${marketsHtml(m)}`;
+  $$('#match-content .odd-btn').forEach((b) =>
+    b.addEventListener('click', () => {
+      closeMatchPanel();
+      openBet(b.dataset.mid, b.dataset.market, b.dataset.sel);
+    })
+  );
+  $('#match-modal').classList.remove('hidden');
+}
+function closeMatchPanel() {
+  $('#match-modal').classList.add('hidden');
 }
 
 // ----- Kupon paneli -----
@@ -607,6 +672,10 @@ function closeBet() {
 $('#bet-close').addEventListener('click', closeBet);
 $('#bet-modal').addEventListener('click', (e) => {
   if (e.target.id === 'bet-modal') closeBet();
+});
+$('#match-close').addEventListener('click', closeMatchPanel);
+$('#match-modal').addEventListener('click', (e) => {
+  if (e.target.id === 'match-modal') closeMatchPanel();
 });
 
 // ----- Kuponlarim -----
