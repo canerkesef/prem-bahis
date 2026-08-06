@@ -163,6 +163,15 @@ input{font-family:inherit}
 .panel-head{display:flex;align-items:center;gap:12px;padding-right:34px;margin-bottom:10px;padding-bottom:12px;border-bottom:1px solid var(--line)}
 .panel-head .teams-col{flex:1;display:flex;flex-direction:column;gap:8px}
 
+/* ---------- Acilir-kapanir bahis gruplari ---------- */
+.mgroup{border:1px solid var(--line);border-radius:12px;margin-bottom:10px;overflow:hidden;background:var(--card)}
+.mgroup-head{width:100%;display:flex;align-items:center;justify-content:space-between;background:var(--soft);border:0;padding:13px 14px;font-size:14px;font-weight:800;color:var(--pri);cursor:pointer}
+.mg-ico{color:var(--muted);font-size:13px;transition:transform .18s}
+.mgroup.open .mg-ico{transform:rotate(180deg)}
+.mgroup-body{display:none;padding:6px 12px 12px}
+.mgroup.open .mgroup-body{display:block}
+.mgroup-body .market:first-child{margin-top:6px}
+
 /* Masaustunde sekme ikonlari gizli (sadece yazi) */
 .nav button .ic{display:none}
 

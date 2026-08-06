@@ -1,35 +1,52 @@
 'use strict';
 
 const { sql } = require('./db');
+const { CS_SCORES } = require('./odds-derive');
 
 // Bir kuponun (market + selection) verilen skora gore kazanip kazanmadigi.
 function isWinner(market, sel, h, a) {
   const total = h + a;
   const res = h > a ? '1' : h === a ? 'X' : '2';
+  const btts = h > 0 && a > 0 ? 'var' : 'yok';
+  const ou25 = total > 2 ? 'ust' : 'alt';
+  const ouOver = (line) => (sel === 'over' ? total > line : total < line);
+
   switch (market) {
     case '1x2':
       return sel === res;
-    case 'dc': // cifte sans
+    case 'dc':
       return (
-        (sel === '1x' && (res === '1' || res === 'X')) ||
-        (sel === '12' && (res === '1' || res === '2')) ||
-        (sel === 'x2' && (res === 'X' || res === '2'))
+        (sel === '1x' && res !== '2') ||
+        (sel === '12' && res !== 'X') ||
+        (sel === 'x2' && res !== '1')
       );
-    case 'ou15':
-      return sel === 'over' ? total > 1 : total <= 1;
-    case 'ou25':
-      return sel === 'over' ? total > 2 : total <= 2;
-    case 'ou35':
-      return sel === 'over' ? total > 3 : total <= 3;
-    case 'oe': // tek/cift
-      return sel === 'even' ? total % 2 === 0 : total % 2 === 1;
-    case 'btts':
-      return sel === 'yes' ? h > 0 && a > 0 : !(h > 0 && a > 0);
-    case 'hcap': { // handikap: ev sahibi -1
-      const ah = h - 1;
-      const r = ah > a ? '1' : ah === a ? 'X' : '2';
-      return sel === r;
-    }
+    case 'hcap': { const r = h - 1 > a ? '1' : h - 1 === a ? 'X' : '2'; return sel === r; }
+    case 'hcap_a': { const r = h > a - 1 ? '1' : h === a - 1 ? 'X' : '2'; return sel === r; }
+    case 'ou05': return ouOver(0.5);
+    case 'ou15': return ouOver(1.5);
+    case 'ou25': return ouOver(2.5);
+    case 'ou35': return ouOver(3.5);
+    case 'ou45': return ouOver(4.5);
+    case 'oe': return sel === 'even' ? total % 2 === 0 : total % 2 === 1;
+    case 'btts': return sel === btts;
+    case 'goals_band':
+      if (sel === '0-1') return total <= 1;
+      if (sel === '2-3') return total >= 2 && total <= 3;
+      if (sel === '4-5') return total >= 4 && total <= 5;
+      if (sel === '6+') return total >= 6;
+      return false;
+    case 'h_ou05': return sel === 'over' ? h > 0.5 : h < 0.5;
+    case 'h_ou15': return sel === 'over' ? h > 1.5 : h < 1.5;
+    case 'h_ou25': return sel === 'over' ? h > 2.5 : h < 2.5;
+    case 'a_ou05': return sel === 'over' ? a > 0.5 : a < 0.5;
+    case 'a_ou15': return sel === 'over' ? a > 1.5 : a < 1.5;
+    case 'a_ou25': return sel === 'over' ? a > 2.5 : a < 2.5;
+    case 'ms_ou25': { const [r, ou] = sel.split('-'); return r === res && ou === ou25; }
+    case 'ms_btts': { const [r, bt] = sel.split('-'); return r === res && bt === btts; }
+    case 'btts_ou25': { const [bt, ou] = sel.split('-'); return bt === btts && ou === ou25; }
+    case 'cs':
+      if (sel === 'diger') return !CS_SCORES.includes(`${h}-${a}`);
+      return sel === `${h}-${a}`;
     default:
       return false;
   }

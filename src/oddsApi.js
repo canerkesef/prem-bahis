@@ -3,7 +3,7 @@
 // The Odds API (https://the-odds-api.com) uzerinden Premier Lig
 // maclari, oranlari ve sonuclari cekilir. Ucretsiz plan aylik ~500 istek.
 const { sql } = require('./db');
-const { computeExtraOdds } = require('./odds-derive');
+const { computeMarkets } = require('./odds-derive');
 
 const SPORT = 'soccer_epl';
 const BASE = 'https://api.the-odds-api.com/v4';
@@ -49,71 +49,29 @@ async function refreshMatches() {
   }
   const events = await res.json();
 
-  // Ikincil cagri: btts (Karsilikli Gol). Bazi planlarda olmayabilir -> hata
-  // olursa ana veriyi bozmadan atlanir, KG oranlari bos kalir.
-  const bttsByEvent = {};
-  try {
-    const bttsUrl =
-      `${BASE}/sports/${SPORT}/odds/?apiKey=${apiKey()}` +
-      `&regions=${region()}&markets=btts&oddsFormat=decimal&dateFormat=iso`;
-    const bres = await fetch(bttsUrl);
-    if (bres.ok) {
-      const bevents = await bres.json();
-      for (const be of bevents) bttsByEvent[be.id] = be.bookmakers || [];
-    }
-  } catch (_) {
-    /* KG orani alinamadi, sorun degil */
-  }
-
   let count = 0;
   for (const ev of events) {
     const home = ev.home_team;
     const away = ev.away_team;
     const bms = ev.bookmakers || [];
-    const bttsBms = bttsByEvent[ev.id] || [];
-    const row = {
-      id: ev.id,
-      home,
-      away,
-      commence: ev.commence_time,
+    const base = {
       odd_1: collectPrices(bms, 'h2h', (o) => o.name === home),
       odd_x: collectPrices(bms, 'h2h', (o) => o.name === 'Draw'),
       odd_2: collectPrices(bms, 'h2h', (o) => o.name === away),
       odd_over: collectPrices(bms, 'totals', (o) => o.name === 'Over' && Number(o.point) === 2.5),
       odd_under: collectPrices(bms, 'totals', (o) => o.name === 'Under' && Number(o.point) === 2.5),
-      odd_btts_yes: collectPrices(bttsBms, 'btts', (o) => o.name === 'Yes'),
-      odd_btts_no: collectPrices(bttsBms, 'btts', (o) => o.name === 'No'),
     };
     // 1X2 orani gelmeyen maci atla (ise yaramaz).
-    if (!row.odd_1 || !row.odd_2) continue;
+    if (!base.odd_1 || !base.odd_2) continue;
 
-    const ex = computeExtraOdds(row);
-    // KG (btts) API'den gelmezse turetilmis degeri kullan
-    const bttsYes = row.odd_btts_yes || ex.odd_btts_yes;
-    const bttsNo = row.odd_btts_no || ex.odd_btts_no;
+    const markets = computeMarkets(base);
+    if (!markets) continue;
     await sql`
-      INSERT INTO matches (id, home_team, away_team, commence_time, status,
-        odd_1, odd_x, odd_2, odd_over, odd_under, odd_btts_yes, odd_btts_no,
-        odd_dc_1x, odd_dc_12, odd_dc_x2, odd_over15, odd_under15, odd_over35, odd_under35,
-        odd_odd, odd_even, odd_h1, odd_hx, odd_h2, last_update)
-      VALUES (${row.id}, ${row.home}, ${row.away}, ${row.commence}, 'open',
-        ${row.odd_1}, ${row.odd_x}, ${row.odd_2}, ${row.odd_over}, ${row.odd_under},
-        ${bttsYes}, ${bttsNo},
-        ${ex.odd_dc_1x}, ${ex.odd_dc_12}, ${ex.odd_dc_x2}, ${ex.odd_over15}, ${ex.odd_under15},
-        ${ex.odd_over35}, ${ex.odd_under35}, ${ex.odd_odd}, ${ex.odd_even},
-        ${ex.odd_h1}, ${ex.odd_hx}, ${ex.odd_h2}, now())
+      INSERT INTO matches (id, home_team, away_team, commence_time, status, markets, last_update)
+      VALUES (${ev.id}, ${home}, ${away}, ${ev.commence_time}, 'open', ${JSON.stringify(markets)}::jsonb, now())
       ON CONFLICT (id) DO UPDATE SET
         home_team=EXCLUDED.home_team, away_team=EXCLUDED.away_team,
-        commence_time=EXCLUDED.commence_time,
-        odd_1=EXCLUDED.odd_1, odd_x=EXCLUDED.odd_x, odd_2=EXCLUDED.odd_2,
-        odd_over=EXCLUDED.odd_over, odd_under=EXCLUDED.odd_under,
-        odd_btts_yes=EXCLUDED.odd_btts_yes, odd_btts_no=EXCLUDED.odd_btts_no,
-        odd_dc_1x=EXCLUDED.odd_dc_1x, odd_dc_12=EXCLUDED.odd_dc_12, odd_dc_x2=EXCLUDED.odd_dc_x2,
-        odd_over15=EXCLUDED.odd_over15, odd_under15=EXCLUDED.odd_under15,
-        odd_over35=EXCLUDED.odd_over35, odd_under35=EXCLUDED.odd_under35,
-        odd_odd=EXCLUDED.odd_odd, odd_even=EXCLUDED.odd_even,
-        odd_h1=EXCLUDED.odd_h1, odd_hx=EXCLUDED.odd_hx, odd_h2=EXCLUDED.odd_h2,
-        last_update=now()
+        commence_time=EXCLUDED.commence_time, markets=EXCLUDED.markets, last_update=now()
       WHERE matches.status='open'`;
     count++;
   }

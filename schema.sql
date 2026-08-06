@@ -22,14 +22,7 @@ create table if not exists matches (
   status        text not null default 'open', -- open | settled | void
   home_score    integer,
   away_score    integer,
-  odd_1 numeric, odd_x numeric, odd_2 numeric,
-  odd_over numeric, odd_under numeric,
-  odd_btts_yes numeric, odd_btts_no numeric,
-  odd_dc_1x numeric, odd_dc_12 numeric, odd_dc_x2 numeric,
-  odd_over15 numeric, odd_under15 numeric,
-  odd_over35 numeric, odd_under35 numeric,
-  odd_odd numeric, odd_even numeric,
-  odd_h1 numeric, odd_hx numeric, odd_h2 numeric,
+  markets       jsonb,   -- tum bahis pazarlari ve oranlari
   last_update   timestamptz not null default now()
 );
 

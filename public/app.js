@@ -81,26 +81,65 @@ function toast(msg, isErr = false) {
   setTimeout(() => t.classList.add('hidden'), 2600);
 }
 
-const PICK_LABELS = {
-  '1x2': { '1': 'Ev Sahibi (1)', X: 'Beraberlik (X)', '2': 'Deplasman (2)' },
-  dc: { '1x': '1 veya X', '12': '1 veya 2', x2: 'X veya 2' },
-  ou15: { over: '1.5 Üst', under: '1.5 Alt' },
-  ou25: { over: '2.5 Üst', under: '2.5 Alt' },
-  ou35: { over: '3.5 Üst', under: '3.5 Alt' },
-  oe: { odd: 'Tek', even: 'Çift' },
-  btts: { yes: 'KG Var', no: 'KG Yok' },
-  hcap: { '1': 'Ev -1', X: 'Beraberlik (-1)', '2': 'Deplasman +1' },
-};
-const MARKET_LABELS = {
-  '1x2': 'Maç Sonucu',
-  dc: 'Çifte Şans',
-  ou15: 'Alt / Üst 1.5',
-  ou25: 'Alt / Üst 2.5',
-  ou35: 'Alt / Üst 3.5',
-  oe: 'Toplam Gol Tek / Çift',
-  btts: 'Karşılıklı Gol',
-  hcap: 'Handikap (Ev -1)',
-};
+// Kesin skor seçenekleri (odds-derive ile ayni sirada) + Diger
+const CS_LIST = [
+  ['1-0', '1-0'], ['2-0', '2-0'], ['2-1', '2-1'], ['3-0', '3-0'], ['3-1', '3-1'], ['3-2', '3-2'],
+  ['0-0', '0-0'], ['1-1', '1-1'], ['2-2', '2-2'], ['3-3', '3-3'],
+  ['0-1', '0-1'], ['0-2', '0-2'], ['1-2', '1-2'], ['0-3', '0-3'], ['1-3', '1-3'], ['2-3', '2-3'],
+  ['diger', 'Diğer'],
+];
+
+// Tum pazarlar, gruplu. Tek kaynak: hem arayuz hem etiketler buradan uretilir.
+const MARKET_GROUPS = [
+  { title: 'Maç Sonucu', open: true, markets: [
+    { key: '1x2', label: 'Maç Sonucu', cols: 3, sels: [['1', 'Ev (1)'], ['X', 'Berabere (X)'], ['2', 'Dep (2)']] },
+    { key: 'dc', label: 'Çifte Şans', cols: 3, sels: [['1x', '1-X'], ['12', '1-2'], ['x2', 'X-2']] },
+    { key: 'hcap', label: 'Handikap (Ev -1)', cols: 3, sels: [['1', 'Ev -1'], ['X', 'Ber. (-1)'], ['2', 'Dep +1']] },
+    { key: 'hcap_a', label: 'Handikap (Dep -1)', cols: 3, sels: [['1', 'Ev +1'], ['X', 'Ber. (-1)'], ['2', 'Dep -1']] },
+  ] },
+  { title: 'Gol Bahisleri', open: true, markets: [
+    { key: 'ou05', label: 'Alt / Üst 0.5', cols: 2, sels: [['over', '0.5 Üst'], ['under', '0.5 Alt']] },
+    { key: 'ou15', label: 'Alt / Üst 1.5', cols: 2, sels: [['over', '1.5 Üst'], ['under', '1.5 Alt']] },
+    { key: 'ou25', label: 'Alt / Üst 2.5', cols: 2, sels: [['over', '2.5 Üst'], ['under', '2.5 Alt']] },
+    { key: 'ou35', label: 'Alt / Üst 3.5', cols: 2, sels: [['over', '3.5 Üst'], ['under', '3.5 Alt']] },
+    { key: 'ou45', label: 'Alt / Üst 4.5', cols: 2, sels: [['over', '4.5 Üst'], ['under', '4.5 Alt']] },
+    { key: 'btts', label: 'Karşılıklı Gol', cols: 2, sels: [['yes', 'KG Var'], ['no', 'KG Yok']] },
+    { key: 'oe', label: 'Toplam Gol Tek / Çift', cols: 2, sels: [['odd', 'Tek'], ['even', 'Çift']] },
+    { key: 'goals_band', label: 'Toplam Gol Aralığı', cols: 4, sels: [['0-1', '0-1'], ['2-3', '2-3'], ['4-5', '4-5'], ['6+', '6+']] },
+  ] },
+  { title: 'Takım Golleri', open: false, markets: [
+    { key: 'h_ou05', label: 'Ev Sahibi Alt/Üst 0.5', cols: 2, sels: [['over', '0.5 Üst'], ['under', '0.5 Alt']] },
+    { key: 'h_ou15', label: 'Ev Sahibi Alt/Üst 1.5', cols: 2, sels: [['over', '1.5 Üst'], ['under', '1.5 Alt']] },
+    { key: 'h_ou25', label: 'Ev Sahibi Alt/Üst 2.5', cols: 2, sels: [['over', '2.5 Üst'], ['under', '2.5 Alt']] },
+    { key: 'a_ou05', label: 'Deplasman Alt/Üst 0.5', cols: 2, sels: [['over', '0.5 Üst'], ['under', '0.5 Alt']] },
+    { key: 'a_ou15', label: 'Deplasman Alt/Üst 1.5', cols: 2, sels: [['over', '1.5 Üst'], ['under', '1.5 Alt']] },
+    { key: 'a_ou25', label: 'Deplasman Alt/Üst 2.5', cols: 2, sels: [['over', '2.5 Üst'], ['under', '2.5 Alt']] },
+  ] },
+  { title: 'Kombinasyonlar', open: false, markets: [
+    { key: 'ms_ou25', label: 'Maç Sonucu + Alt/Üst 2.5', cols: 3, sels: [
+      ['1-ust', '1 & Üst'], ['X-ust', 'X & Üst'], ['2-ust', '2 & Üst'],
+      ['1-alt', '1 & Alt'], ['X-alt', 'X & Alt'], ['2-alt', '2 & Alt']] },
+    { key: 'ms_btts', label: 'Maç Sonucu + KG', cols: 3, sels: [
+      ['1-var', '1 & Var'], ['X-var', 'X & Var'], ['2-var', '2 & Var'],
+      ['1-yok', '1 & Yok'], ['X-yok', 'X & Yok'], ['2-yok', '2 & Yok']] },
+    { key: 'btts_ou25', label: 'KG + Alt/Üst 2.5', cols: 2, sels: [
+      ['var-ust', 'Var & Üst'], ['var-alt', 'Var & Alt'], ['yok-ust', 'Yok & Üst'], ['yok-alt', 'Yok & Alt']] },
+  ] },
+  { title: 'Kesin Skor', open: false, markets: [
+    { key: 'cs', label: 'Kesin Skor', cols: 3, sels: CS_LIST },
+  ] },
+];
+
+// Etiket haritalarini gruplardan uret
+const MARKET_LABELS = {};
+const PICK_LABELS = {};
+for (const g of MARKET_GROUPS) {
+  for (const mk of g.markets) {
+    MARKET_LABELS[mk.key] = mk.label;
+    PICK_LABELS[mk.key] = {};
+    for (const [sk, sl] of mk.sels) PICK_LABELS[mk.key][sk] = sl;
+  }
+}
 const STATUS_LABELS = { pending: 'Bekliyor', won: 'Kazandı', lost: 'Kaybetti', void: 'İptal' };
 
 let ME = null;
@@ -240,7 +279,8 @@ function oddBtn(mid, market, sel, label, odd) {
 
 // Bultende kompakt mac satiri. Mac basladiysa oranlar yerine CANLI rozeti.
 function matchCard(m) {
-  const o = m.odds;
+  const o = m.odds || {};
+  const ms = o['1x2'] || {};
   const k = fmtKick(m.commence_time);
   const oneline = (v) => (v ? Number(v).toFixed(2) : '-');
   const started = new Date(m.commence_time).getTime() <= Date.now();
@@ -268,77 +308,30 @@ function matchCard(m) {
   return `<div class="match match-lite" data-mid="${m.id}">
     ${fixture}
     <div class="lite-ms">
-      <span class="ms-pill"><i>1</i>${oneline(o['1x2']['1'])}</span>
-      <span class="ms-pill"><i>X</i>${oneline(o['1x2'].X)}</span>
-      <span class="ms-pill"><i>2</i>${oneline(o['1x2']['2'])}</span>
-      <span class="ms-more">+7 seçenek ›</span>
+      <span class="ms-pill"><i>1</i>${oneline(ms['1'])}</span>
+      <span class="ms-pill"><i>X</i>${oneline(ms.X)}</span>
+      <span class="ms-pill"><i>2</i>${oneline(ms['2'])}</span>
+      <span class="ms-more">Tüm oranlar ›</span>
     </div>
   </div>`;
 }
 
-// Panelde gosterilecek tum bahis pazarlari
+// Panelde gosterilecek tum bahis pazarlari (gruplu, acilir-kapanir)
 function marketsHtml(m) {
-  const o = m.odds;
-  return `
-    <div class="market">
-      <div class="market-label">Maç Sonucu</div>
-      <div class="odds-row c3">
-        ${oddBtn(m.id, '1x2', '1', '1', o['1x2']['1'])}
-        ${oddBtn(m.id, '1x2', 'X', 'X', o['1x2'].X)}
-        ${oddBtn(m.id, '1x2', '2', '2', o['1x2']['2'])}
-      </div>
-    </div>
-    <div class="market">
-      <div class="market-label">Çifte Şans</div>
-      <div class="odds-row c3">
-        ${oddBtn(m.id, 'dc', '1x', '1-X', o.dc['1x'])}
-        ${oddBtn(m.id, 'dc', '12', '1-2', o.dc['12'])}
-        ${oddBtn(m.id, 'dc', 'x2', 'X-2', o.dc.x2)}
-      </div>
-    </div>
-    <div class="market">
-      <div class="market-label">Handikap (Ev -1)</div>
-      <div class="odds-row c3">
-        ${oddBtn(m.id, 'hcap', '1', 'Ev -1', o.hcap['1'])}
-        ${oddBtn(m.id, 'hcap', 'X', 'Ber. (-1)', o.hcap.X)}
-        ${oddBtn(m.id, 'hcap', '2', 'Dep +1', o.hcap['2'])}
-      </div>
-    </div>
-    <div class="market">
-      <div class="market-label">Alt / Üst 1.5</div>
-      <div class="odds-row c2">
-        ${oddBtn(m.id, 'ou15', 'over', '1.5 Üst', o.ou15.over)}
-        ${oddBtn(m.id, 'ou15', 'under', '1.5 Alt', o.ou15.under)}
-      </div>
-    </div>
-    <div class="market">
-      <div class="market-label">Alt / Üst 2.5</div>
-      <div class="odds-row c2">
-        ${oddBtn(m.id, 'ou25', 'over', '2.5 Üst', o.ou25.over)}
-        ${oddBtn(m.id, 'ou25', 'under', '2.5 Alt', o.ou25.under)}
-      </div>
-    </div>
-    <div class="market">
-      <div class="market-label">Alt / Üst 3.5</div>
-      <div class="odds-row c2">
-        ${oddBtn(m.id, 'ou35', 'over', '3.5 Üst', o.ou35.over)}
-        ${oddBtn(m.id, 'ou35', 'under', '3.5 Alt', o.ou35.under)}
-      </div>
-    </div>
-    <div class="market">
-      <div class="market-label">Karşılıklı Gol</div>
-      <div class="odds-row c2">
-        ${oddBtn(m.id, 'btts', 'yes', 'KG Var', o.btts.yes)}
-        ${oddBtn(m.id, 'btts', 'no', 'KG Yok', o.btts.no)}
-      </div>
-    </div>
-    <div class="market">
-      <div class="market-label">Toplam Gol Tek / Çift</div>
-      <div class="odds-row c2">
-        ${oddBtn(m.id, 'oe', 'odd', 'Tek', o.oe.odd)}
-        ${oddBtn(m.id, 'oe', 'even', 'Çift', o.oe.even)}
-      </div>
+  const o = m.odds || {};
+  return MARKET_GROUPS.map((g) => {
+    const inner = g.markets
+      .map((mk) => {
+        const mo = o[mk.key] || {};
+        const btns = mk.sels.map(([sel, lab]) => oddBtn(m.id, mk.key, sel, lab, mo[sel])).join('');
+        return `<div class="market"><div class="market-label">${mk.label}</div><div class="odds-row c${mk.cols}">${btns}</div></div>`;
+      })
+      .join('');
+    return `<div class="mgroup ${g.open ? 'open' : ''}">
+      <button type="button" class="mgroup-head">${g.title}<span class="mg-ico">▾</span></button>
+      <div class="mgroup-body">${inner}</div>
     </div>`;
+  }).join('');
 }
 
 // Maca tiklayinca acilan (asagidan kayan) oran paneli
@@ -356,12 +349,16 @@ async function openMatchPanel(mid) {
       <div class="kick"><b>${k.day}</b>${k.time}</div>
     </div>
     ${marketsHtml(m)}`;
+  $$('#match-content .mgroup-head').forEach((h) =>
+    h.addEventListener('click', () => h.parentElement.classList.toggle('open'))
+  );
   $$('#match-content .odd-btn').forEach((b) =>
     b.addEventListener('click', () => {
       closeMatchPanel();
       openBet(b.dataset.mid, b.dataset.market, b.dataset.sel);
     })
   );
+  $('#match-modal').scrollTop = 0;
   $('#match-modal').classList.remove('hidden');
 }
 function closeMatchPanel() {
@@ -374,7 +371,7 @@ async function openBet(mid, market, sel) {
   const { matches } = await api('/matches');
   const m = matches.find((x) => x.id === mid);
   if (!m) return toast('Maç bulunamadı', true);
-  const odd = m.odds[market][sel];
+  const odd = m.odds && m.odds[market] && m.odds[market][sel];
   if (!odd) return toast('Oran mevcut değil', true);
 
   $('#bet-content').innerHTML = `
