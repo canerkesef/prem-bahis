@@ -3,6 +3,7 @@
 // API anahtari yoksa uygulamanin hemen denenebilmesi icin
 // ornek Premier Lig maclari olusturur.
 const { sql } = require('./db');
+const { computeExtraOdds } = require('./odds-derive');
 
 function daysFromNow(d, hour = 17) {
   const dt = new Date(Date.now() + d * 24 * 60 * 60 * 1000);
@@ -28,11 +29,17 @@ function seedSampleMatches() {
     let i = 0;
     for (const s of SAMPLE) {
       i++;
+      const ex = computeExtraOdds({ odd_1: s[2], odd_x: s[3], odd_2: s[4], odd_over: s[5], odd_under: s[6] });
       await sql`
         INSERT INTO matches (id, home_team, away_team, commence_time, status,
-          odd_1, odd_x, odd_2, odd_over, odd_under, odd_btts_yes, odd_btts_no)
+          odd_1, odd_x, odd_2, odd_over, odd_under, odd_btts_yes, odd_btts_no,
+          odd_dc_1x, odd_dc_12, odd_dc_x2, odd_over15, odd_under15, odd_over35, odd_under35,
+          odd_odd, odd_even, odd_h1, odd_hx, odd_h2)
         VALUES (${'sample-' + i}, ${s[0]}, ${s[1]}, ${daysFromNow(i)}, 'open',
-          ${s[2]}, ${s[3]}, ${s[4]}, ${s[5]}, ${s[6]}, ${s[7]}, ${s[8]})
+          ${s[2]}, ${s[3]}, ${s[4]}, ${s[5]}, ${s[6]}, ${s[7]}, ${s[8]},
+          ${ex.odd_dc_1x}, ${ex.odd_dc_12}, ${ex.odd_dc_x2}, ${ex.odd_over15}, ${ex.odd_under15},
+          ${ex.odd_over35}, ${ex.odd_under35}, ${ex.odd_odd}, ${ex.odd_even},
+          ${ex.odd_h1}, ${ex.odd_hx}, ${ex.odd_h2})
         ON CONFLICT (id) DO NOTHING`;
     }
     console.log(`[seed] ${i} ornek mac eklendi (API anahtari yok).`);

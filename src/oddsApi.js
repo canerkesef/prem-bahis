@@ -3,6 +3,7 @@
 // The Odds API (https://the-odds-api.com) uzerinden Premier Lig
 // maclari, oranlari ve sonuclari cekilir. Ucretsiz plan aylik ~500 istek.
 const { sql } = require('./db');
+const { computeExtraOdds } = require('./odds-derive');
 
 const SPORT = 'soccer_epl';
 const BASE = 'https://api.the-odds-api.com/v4';
@@ -86,18 +87,29 @@ async function refreshMatches() {
     // 1X2 orani gelmeyen maci atla (ise yaramaz).
     if (!row.odd_1 || !row.odd_2) continue;
 
+    const ex = computeExtraOdds(row);
     await sql`
       INSERT INTO matches (id, home_team, away_team, commence_time, status,
-        odd_1, odd_x, odd_2, odd_over, odd_under, odd_btts_yes, odd_btts_no, last_update)
+        odd_1, odd_x, odd_2, odd_over, odd_under, odd_btts_yes, odd_btts_no,
+        odd_dc_1x, odd_dc_12, odd_dc_x2, odd_over15, odd_under15, odd_over35, odd_under35,
+        odd_odd, odd_even, odd_h1, odd_hx, odd_h2, last_update)
       VALUES (${row.id}, ${row.home}, ${row.away}, ${row.commence}, 'open',
         ${row.odd_1}, ${row.odd_x}, ${row.odd_2}, ${row.odd_over}, ${row.odd_under},
-        ${row.odd_btts_yes}, ${row.odd_btts_no}, now())
+        ${row.odd_btts_yes}, ${row.odd_btts_no},
+        ${ex.odd_dc_1x}, ${ex.odd_dc_12}, ${ex.odd_dc_x2}, ${ex.odd_over15}, ${ex.odd_under15},
+        ${ex.odd_over35}, ${ex.odd_under35}, ${ex.odd_odd}, ${ex.odd_even},
+        ${ex.odd_h1}, ${ex.odd_hx}, ${ex.odd_h2}, now())
       ON CONFLICT (id) DO UPDATE SET
         home_team=EXCLUDED.home_team, away_team=EXCLUDED.away_team,
         commence_time=EXCLUDED.commence_time,
         odd_1=EXCLUDED.odd_1, odd_x=EXCLUDED.odd_x, odd_2=EXCLUDED.odd_2,
         odd_over=EXCLUDED.odd_over, odd_under=EXCLUDED.odd_under,
         odd_btts_yes=EXCLUDED.odd_btts_yes, odd_btts_no=EXCLUDED.odd_btts_no,
+        odd_dc_1x=EXCLUDED.odd_dc_1x, odd_dc_12=EXCLUDED.odd_dc_12, odd_dc_x2=EXCLUDED.odd_dc_x2,
+        odd_over15=EXCLUDED.odd_over15, odd_under15=EXCLUDED.odd_under15,
+        odd_over35=EXCLUDED.odd_over35, odd_under35=EXCLUDED.odd_under35,
+        odd_odd=EXCLUDED.odd_odd, odd_even=EXCLUDED.odd_even,
+        odd_h1=EXCLUDED.odd_h1, odd_hx=EXCLUDED.odd_hx, odd_h2=EXCLUDED.odd_h2,
         last_update=now()
       WHERE matches.status='open'`;
     count++;

@@ -83,10 +83,24 @@ function toast(msg, isErr = false) {
 
 const PICK_LABELS = {
   '1x2': { '1': 'Ev Sahibi (1)', X: 'Beraberlik (X)', '2': 'Deplasman (2)' },
+  dc: { '1x': '1 veya X', '12': '1 veya 2', x2: 'X veya 2' },
+  ou15: { over: '1.5 Üst', under: '1.5 Alt' },
   ou25: { over: '2.5 Üst', under: '2.5 Alt' },
+  ou35: { over: '3.5 Üst', under: '3.5 Alt' },
+  oe: { odd: 'Tek', even: 'Çift' },
   btts: { yes: 'KG Var', no: 'KG Yok' },
+  hcap: { '1': 'Ev -1', X: 'Beraberlik (-1)', '2': 'Deplasman +1' },
 };
-const MARKET_LABELS = { '1x2': 'Maç Sonucu', ou25: 'Alt / Üst 2.5', btts: 'Karşılıklı Gol' };
+const MARKET_LABELS = {
+  '1x2': 'Maç Sonucu',
+  dc: 'Çifte Şans',
+  ou15: 'Alt / Üst 1.5',
+  ou25: 'Alt / Üst 2.5',
+  ou35: 'Alt / Üst 3.5',
+  oe: 'Toplam Gol Tek / Çift',
+  btts: 'Karşılıklı Gol',
+  hcap: 'Handikap (Ev -1)',
+};
 const STATUS_LABELS = { pending: 'Bekliyor', won: 'Kazandı', lost: 'Kaybetti', void: 'İptal' };
 
 let ME = null;
@@ -244,6 +258,29 @@ function matchCard(m) {
       </div>
     </div>
     <div class="market">
+      <div class="market-label">Çifte Şans</div>
+      <div class="odds-row c3">
+        ${oddBtn(m.id, 'dc', '1x', '1-X', o.dc['1x'])}
+        ${oddBtn(m.id, 'dc', '12', '1-2', o.dc['12'])}
+        ${oddBtn(m.id, 'dc', 'x2', 'X-2', o.dc.x2)}
+      </div>
+    </div>
+    <div class="market">
+      <div class="market-label">Handikap (Ev -1)</div>
+      <div class="odds-row c3">
+        ${oddBtn(m.id, 'hcap', '1', 'Ev -1', o.hcap['1'])}
+        ${oddBtn(m.id, 'hcap', 'X', 'Ber. (-1)', o.hcap.X)}
+        ${oddBtn(m.id, 'hcap', '2', 'Dep +1', o.hcap['2'])}
+      </div>
+    </div>
+    <div class="market">
+      <div class="market-label">Alt / Üst 1.5</div>
+      <div class="odds-row c2">
+        ${oddBtn(m.id, 'ou15', 'over', '1.5 Üst', o.ou15.over)}
+        ${oddBtn(m.id, 'ou15', 'under', '1.5 Alt', o.ou15.under)}
+      </div>
+    </div>
+    <div class="market">
       <div class="market-label">Alt / Üst 2.5</div>
       <div class="odds-row c2">
         ${oddBtn(m.id, 'ou25', 'over', '2.5 Üst', o.ou25.over)}
@@ -251,10 +288,24 @@ function matchCard(m) {
       </div>
     </div>
     <div class="market">
+      <div class="market-label">Alt / Üst 3.5</div>
+      <div class="odds-row c2">
+        ${oddBtn(m.id, 'ou35', 'over', '3.5 Üst', o.ou35.over)}
+        ${oddBtn(m.id, 'ou35', 'under', '3.5 Alt', o.ou35.under)}
+      </div>
+    </div>
+    <div class="market">
       <div class="market-label">Karşılıklı Gol</div>
       <div class="odds-row c2">
         ${oddBtn(m.id, 'btts', 'yes', 'KG Var', o.btts.yes)}
         ${oddBtn(m.id, 'btts', 'no', 'KG Yok', o.btts.no)}
+      </div>
+    </div>
+    <div class="market">
+      <div class="market-label">Toplam Gol Tek / Çift</div>
+      <div class="odds-row c2">
+        ${oddBtn(m.id, 'oe', 'odd', 'Tek', o.oe.odd)}
+        ${oddBtn(m.id, 'oe', 'even', 'Çift', o.oe.even)}
       </div>
     </div>
   </div>`;

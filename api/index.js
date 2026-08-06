@@ -9,6 +9,7 @@ const { sql, ensureAdmin } = require('../src/db');
 const { seedSampleMatches } = require('../src/seed');
 const { refreshMatches, refreshResults, hasApi } = require('../src/oddsApi');
 const { settleMatch, voidMatch } = require('../src/settle');
+const { computeExtraOdds } = require('../src/odds-derive');
 
 const app = express();
 const SECRET = process.env.SESSION_SECRET || 'lutfen-bu-anahtari-degistir';
@@ -74,8 +75,13 @@ function setLoginCookie(res, id) {
 
 const MARKETS = {
   '1x2': { '1': 'odd_1', X: 'odd_x', '2': 'odd_2' },
+  dc: { '1x': 'odd_dc_1x', '12': 'odd_dc_12', x2: 'odd_dc_x2' },
+  ou15: { over: 'odd_over15', under: 'odd_under15' },
   ou25: { over: 'odd_over', under: 'odd_under' },
+  ou35: { over: 'odd_over35', under: 'odd_under35' },
+  oe: { odd: 'odd_odd', even: 'odd_even' },
   btts: { yes: 'odd_btts_yes', no: 'odd_btts_no' },
+  hcap: { '1': 'odd_h1', X: 'odd_hx', '2': 'odd_h2' },
 };
 
 // ================= AUTH =================
@@ -141,8 +147,13 @@ function matchOut(m) {
     away_score: m.away_score,
     odds: {
       '1x2': { '1': num(m.odd_1), X: num(m.odd_x), '2': num(m.odd_2) },
+      dc: { '1x': num(m.odd_dc_1x), '12': num(m.odd_dc_12), x2: num(m.odd_dc_x2) },
+      ou15: { over: num(m.odd_over15), under: num(m.odd_under15) },
       ou25: { over: num(m.odd_over), under: num(m.odd_under) },
+      ou35: { over: num(m.odd_over35), under: num(m.odd_under35) },
+      oe: { odd: num(m.odd_odd), even: num(m.odd_even) },
       btts: { yes: num(m.odd_btts_yes), no: num(m.odd_btts_no) },
+      hcap: { '1': num(m.odd_h1), X: num(m.odd_hx), '2': num(m.odd_h2) },
     },
   };
 }
@@ -358,13 +369,22 @@ app.post('/api/admin/matches', requireAdmin, async (req, res) => {
     const commence = String(b.commence_time || '').trim();
     if (!home || !away || !commence) return res.status(400).json({ error: 'Ev sahibi, deplasman ve tarih zorunlu.' });
     const id = 'manual-' + Date.now();
+    const base = {
+      odd_1: Number(b.odd_1) || null, odd_x: Number(b.odd_x) || null, odd_2: Number(b.odd_2) || null,
+      odd_over: Number(b.odd_over) || null, odd_under: Number(b.odd_under) || null,
+    };
+    const ex = computeExtraOdds(base);
     await sql`
       INSERT INTO matches (id, home_team, away_team, commence_time, status,
-        odd_1, odd_x, odd_2, odd_over, odd_under, odd_btts_yes, odd_btts_no)
+        odd_1, odd_x, odd_2, odd_over, odd_under, odd_btts_yes, odd_btts_no,
+        odd_dc_1x, odd_dc_12, odd_dc_x2, odd_over15, odd_under15, odd_over35, odd_under35,
+        odd_odd, odd_even, odd_h1, odd_hx, odd_h2)
       VALUES (${id}, ${home}, ${away}, ${commence}, 'open',
-        ${Number(b.odd_1) || null}, ${Number(b.odd_x) || null}, ${Number(b.odd_2) || null},
-        ${Number(b.odd_over) || null}, ${Number(b.odd_under) || null},
-        ${Number(b.odd_btts_yes) || null}, ${Number(b.odd_btts_no) || null})`;
+        ${base.odd_1}, ${base.odd_x}, ${base.odd_2}, ${base.odd_over}, ${base.odd_under},
+        ${Number(b.odd_btts_yes) || null}, ${Number(b.odd_btts_no) || null},
+        ${ex.odd_dc_1x}, ${ex.odd_dc_12}, ${ex.odd_dc_x2}, ${ex.odd_over15}, ${ex.odd_under15},
+        ${ex.odd_over35}, ${ex.odd_under35}, ${ex.odd_odd}, ${ex.odd_even},
+        ${ex.odd_h1}, ${ex.odd_hx}, ${ex.odd_h2})`;
     res.json({ ok: true, id });
   } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
