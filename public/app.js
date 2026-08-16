@@ -15,8 +15,9 @@ async function api(path, opts = {}) {
   return data;
 }
 
+// Para birimi: ASCU (arkadaslarin bas harflerinden turetilmis SANAL puan; gercek para degildir)
 function fmtTL(n) {
-  return Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' TL';
+  return Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' ASCU';
 }
 const TZ = 'Europe/Istanbul';
 function fmtDate(iso) {
@@ -263,6 +264,7 @@ async function renderBulten(el) {
     return;
   }
   el.innerHTML =
+    `<div class="disclaimer">🎮 Arkadaşlar arası <b>eğlence oyunu</b> · Gerçek para <b>yoktur</b> · <b>ASCU</b> yalnızca sanal puandır · Bahis/kumar değildir</div>` +
     `<div class="section-title">Maçlar <small>${matches.length} maç</small></div>` +
     matches.map(matchCard).join('') +
     `<p class="foot-tz">Tüm saatler Türkiye saati ile gösterilmektedir · Maça dokun, oranlar açılsın</p>`;
@@ -378,14 +380,14 @@ async function openBet(mid, market, sel) {
     <div class="bet-teams">${m.home_team} vs ${m.away_team}</div>
     <div class="bet-pick">${MARKET_LABELS[market]} · ${PICK_LABELS[market][sel]} · Oran ${Number(odd).toFixed(2)}</div>
     <div class="bet-field">
-      <label>Bahis tutarı (TL) — Bakiye: ${fmtTL(ME.balance)}</label>
+      <label>Bahis tutarı (ASCU) — Bakiye: ${fmtTL(ME.balance)}</label>
       <input id="stake-input" type="number" min="1" step="1" placeholder="Örn. 100" inputmode="numeric" />
       <div class="quick">
         <button data-q="50">50</button><button data-q="100">100</button>
         <button data-q="250">250</button><button data-q="500">500</button>
       </div>
     </div>
-    <div class="bet-summary"><span>Olası kazanç</span><b id="pot-win">0 TL</b></div>
+    <div class="bet-summary"><span>Olası kazanç</span><b id="pot-win">0 ASCU</b></div>
     <button class="btn-primary" id="place-bet">Kuponu Onayla</button>`;
 
   const stakeInput = $('#stake-input');
@@ -487,7 +489,7 @@ async function renderUserDetail(uid) {
     <div class="card">
       <h3>⚙️ Admin İşlemleri</h3>
       <div class="bet-field" style="margin-bottom:12px">
-        <label>Bakiye düzenle (TL)</label>
+        <label>Bakiye düzenle (ASCU)</label>
         <div style="display:flex;gap:8px">
           <input id="adm-balance" type="number" min="0" step="1" value="${Number(user.balance)}" style="flex:1;background:var(--bg);border:1px solid var(--line);color:var(--text);padding:11px;border-radius:8px;font-size:15px" />
           <button class="btn-sm btn-ok" id="adm-balance-save">Kaydet</button>

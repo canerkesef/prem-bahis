@@ -139,6 +139,8 @@ input{font-family:inherit}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--pri);color:#fff;padding:12px 20px;border-radius:10px;font-size:14px;z-index:100;box-shadow:0 8px 30px rgba(28,25,48,.3);max-width:90%;text-align:center}
 .toast.err{background:var(--danger)}
 .info-banner{background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.5}
+.disclaimer{background:#fef3f6;border:1px solid #f6d3de;color:#9c2c4a;border-radius:10px;padding:10px 13px;font-size:12px;line-height:1.5;margin-bottom:14px;text-align:center}
+.disclaimer b{color:#7a1f38}
 
 /* ---------- Kompakt mac satiri (tiklanabilir) ---------- */
 .match-lite{cursor:pointer;transition:.12s}

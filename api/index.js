@@ -26,7 +26,12 @@ async function init() {
   await ensureAdmin();
   if (!hasApi()) await seedSampleMatches();
 }
-app.use(async (req, res, next) => {
+// Statik arayuz her zaman yuklenir (veritabani gerektirmez).
+app.use(express.static(PUBLIC_DIR));
+
+// Veritabani hazirligi YALNIZCA API istekleri icin gerekli.
+// Boylece veritabani gecici olarak kapaliysa bile site acilir, sadece veri gelmez.
+app.use('/api', async (req, res, next) => {
   try {
     if (!initPromise) initPromise = init();
     await initPromise;
@@ -34,11 +39,9 @@ app.use(async (req, res, next) => {
   } catch (e) {
     initPromise = null;
     console.error('[init] hata:', e.message);
-    res.status(500).json({ error: 'Sunucu/veritabani baslatma hatasi: ' + e.message });
+    res.status(503).json({ error: 'Veritabanina su an ulasilamiyor, lutfen biraz sonra tekrar deneyin.' });
   }
 });
-
-app.use(express.static(PUBLIC_DIR));
 
 // -------- Yardimcilar --------
 async function currentUser(req) {
