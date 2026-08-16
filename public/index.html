@@ -937,6 +937,19 @@ async function renderAdmin(el) {
     <div class="card">
       <h3>Maçları Elle Sonuçlandır</h3>
       <div id="settle-list">${matchesHtml}</div>
+    </div>
+
+    <div class="card">
+      <h3>🔄 Sezonu Sıfırla</h3>
+      <p style="color:var(--muted);font-size:13px;line-height:1.5;margin-bottom:12px">
+        Tüm kuponları siler ve <b>herkesin bakiyesini 1.000 ASCU'ya</b> döndürür.
+        Kullanıcı hesapları <b>silinmez</b>. Geri alınamaz.
+      </p>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin-bottom:12px">
+        <input type="checkbox" id="reset-matches" /> Sonuçlanan maçları da tekrar bahse aç
+      </label>
+      <button class="btn-sm btn-no" id="reset-btn">Kuponları & Bakiyeleri Sıfırla</button>
+      <div id="reset-msg" style="margin-top:10px;font-size:13px;color:var(--muted)"></div>
     </div>`;
 
   // Onay/Red
@@ -975,6 +988,22 @@ async function renderAdmin(el) {
       msg.textContent = `${r.settled} maç sonuçlandı, kuponlar hesaplandı.`;
       toast('Sonuçlar işlendi ✅');
       await refreshMe();
+    } catch (e) {
+      msg.textContent = e.message;
+    }
+  });
+
+  // Sezonu sifirla
+  $('#reset-btn').addEventListener('click', async () => {
+    if (!confirm('TÜM kuponlar silinecek ve herkesin bakiyesi 1.000 ASCU olacak. Emin misin?')) return;
+    const msg = $('#reset-msg');
+    msg.textContent = 'Sıfırlanıyor…';
+    try {
+      const alsoMatches = $('#reset-matches').checked;
+      await api('/admin/reset', { method: 'POST', body: { matches: alsoMatches } });
+      toast('Sıfırlandı ✅');
+      await refreshMe();
+      render('admin');
     } catch (e) {
       msg.textContent = e.message;
     }

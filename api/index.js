@@ -305,6 +305,22 @@ app.post('/api/admin/users/:id/balance', requireAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 
+// Admin: sezonu sifirla — tum kuponlari sil, herkesin bakiyesini basa dondur
+// (kullanici hesaplari SILINMEZ). Istege bagli: maclarin sonuclarini da temizle.
+app.post('/api/admin/reset', requireAdmin, async (req, res) => {
+  try {
+    const alsoMatches = req.body && req.body.matches === true;
+    await sql.begin(async (tx) => {
+      await tx`DELETE FROM coupons`;
+      await tx`UPDATE users SET balance = ${START_BALANCE}`;
+      if (alsoMatches) {
+        await tx`UPDATE matches SET status='open', home_score=NULL, away_score=NULL WHERE status IN ('settled','void')`;
+      }
+    });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+
 // Admin: kullaniciyi ve tum kuponlarini sil (kendi hesabini silemez)
 app.post('/api/admin/users/:id/delete', requireAdmin, async (req, res) => {
   try {
