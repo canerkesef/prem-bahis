@@ -125,6 +125,48 @@ async function fetchFootballData() {
   }
 }
 
+// football-data.org: Premier Lig puan durumu (lig tablosu).
+// Ucretsiz plan ~10 istek/dk oldugu icin sonucu kisa sure bellekte tutariz.
+let standingsCache = { at: 0, data: null };
+async function fetchStandings() {
+  const token = (process.env.FOOTBALL_DATA_TOKEN || '').trim();
+  if (!token) return { ok: false, error: 'Puan durumu icin FOOTBALL_DATA_TOKEN gerekli.' };
+  // 5 dakikalik bellek onbellegi (sicak instance icinde)
+  const now = Date.now();
+  if (standingsCache.data && now - standingsCache.at < 5 * 60 * 1000) {
+    return { ok: true, table: standingsCache.data, cached: true };
+  }
+  try {
+    const res = await fetch('https://api.football-data.org/v4/competitions/PL/standings', {
+      headers: { 'X-Auth-Token': token },
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      return { ok: false, error: `football-data hatasi (${res.status}): ${body.slice(0, 140)}` };
+    }
+    const data = await res.json();
+    const total = (data.standings || []).find((s) => s.type === 'TOTAL') || (data.standings || [])[0];
+    const table = (total && total.table ? total.table : []).map((r) => ({
+      pos: r.position,
+      team: (r.team && (r.team.shortName || r.team.name)) || '',
+      full: (r.team && r.team.name) || '',
+      played: r.playedGames,
+      won: r.won,
+      draw: r.draw,
+      lost: r.lost,
+      gf: r.goalsFor,
+      ga: r.goalsAgainst,
+      gd: r.goalDifference,
+      points: r.points,
+      form: r.form || null,
+    }));
+    standingsCache = { at: now, data: table };
+    return { ok: true, table };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+}
+
 // The Odds API: bitmis maclarin mac sonu skorlarini normName ile haritalar.
 async function fetchOddsScores() {
   if (!hasApi()) return { map: {}, has: false, error: 'ODDS_API_KEY yok' };
@@ -193,4 +235,4 @@ async function refreshResults(settleFn) {
   return { ok: true, settled, conflicts, fdError: fd.error, oaError: oa.error, fdActive: fd.has };
 }
 
-module.exports = { refreshMatches, refreshResults, hasApi, normName };
+module.exports = { refreshMatches, refreshResults, hasApi, normName, fetchStandings };

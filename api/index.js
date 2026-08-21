@@ -7,7 +7,7 @@ const bcrypt = require('bcryptjs');
 
 const { sql, ensureAdmin, ensureSchema } = require('../src/db');
 const { seedSampleMatches } = require('../src/seed');
-const { refreshMatches, refreshResults, hasApi } = require('../src/oddsApi');
+const { refreshMatches, refreshResults, hasApi, fetchStandings } = require('../src/oddsApi');
 const { settleMatch, voidMatch } = require('../src/settle');
 const { computeMarkets } = require('../src/odds-derive');
 
@@ -166,6 +166,15 @@ app.get('/api/matches', requireAuth, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
   }
+});
+
+// Gercek Premier Lig puan durumu (football-data.org)
+app.get('/api/standings', requireAuth, async (req, res) => {
+  try {
+    const r = await fetchStandings();
+    if (!r.ok) return res.status(400).json(r);
+    res.json(r);
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 
 app.get('/api/matches/results', requireAuth, async (req, res) => {

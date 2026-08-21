@@ -7,32 +7,16 @@
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-  <!-- Aslan amblemi (ozgun tasarim, tekrar kullanilir) -->
-  <svg width="0" height="0" style="position:absolute"><defs>
-    <symbol id="lion" viewBox="0 0 100 100">
-      <circle cx="50" cy="50" r="49" fill="#3d195b"/>
-      <circle cx="50" cy="50" r="42" fill="#ffffff" opacity=".14"/>
-      <g fill="#f2a63b">
-        <circle cx="80" cy="50" r="11"/><circle cx="75.98" cy="65" r="11"/><circle cx="65" cy="75.98" r="11"/>
-        <circle cx="50" cy="80" r="11"/><circle cx="35" cy="75.98" r="11"/><circle cx="24.02" cy="65" r="11"/>
-        <circle cx="20" cy="50" r="11"/><circle cx="24.02" cy="35" r="11"/><circle cx="35" cy="24.02" r="11"/>
-        <circle cx="50" cy="20" r="11"/><circle cx="65" cy="24.02" r="11"/><circle cx="75.98" cy="35" r="11"/>
-      </g>
-      <circle cx="34" cy="30" r="9" fill="#e58f2a"/><circle cx="66" cy="30" r="9" fill="#e58f2a"/>
-      <circle cx="34" cy="31" r="4.5" fill="#c96f1e"/><circle cx="66" cy="31" r="4.5" fill="#c96f1e"/>
-      <circle cx="50" cy="52" r="27" fill="#f6c56b"/>
-      <ellipse cx="50" cy="60" rx="15" ry="12" fill="#fadfa0"/>
-      <circle cx="41" cy="49" r="3.4" fill="#3a2410"/><circle cx="59" cy="49" r="3.4" fill="#3a2410"/>
-      <path d="M50 57 l6 5 h-12 z" fill="#7a3f14"/>
-      <path d="M50 62 v5 M50 67 q-5 4 -9 1 M50 67 q5 4 9 1" stroke="#7a3f14" stroke-width="2" fill="none" stroke-linecap="round"/>
-    </symbol>
-  </defs></svg>
+  <!-- Acilis animasyonu (splash) -->
+  <div id="splash" class="splash">
+    <span class="lion splash-logo" role="img" aria-label="Premier Lig"></span>
+  </div>
 
   <!-- Giris / Kayit ekrani -->
   <div id="auth-screen" class="auth-screen">
     <div class="auth-card">
       <div class="brand">
-        <svg class="lion"><use href="#lion"/></svg>
+        <span class="lion" role="img" aria-label="Premier Lig"></span>
         <div>
           <h1>Premier Lig</h1>
           <p class="brand-sub">Arkadaşlar arası eğlence oyunu · 2026-2027</p>
@@ -66,7 +50,7 @@
   <div id="app" class="app hidden">
     <header class="topbar">
       <div class="topbar-brand">
-        <svg class="lion"><use href="#lion"/></svg>
+        <span class="lion" role="img" aria-label="Premier Lig"></span>
         <div class="brand-txt">
           <span class="brand-name">Premier Lig</span>
           <span class="brand-season">2026-2027</span>

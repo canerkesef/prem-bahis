@@ -206,6 +206,7 @@ function buildNav() {
     ['bulten', 'Bülten', '⚽'],
     ['kuponlarim', 'Kuponlarım', '🧾'],
     ['kullanicilar', 'Oyuncular', '👥'],
+    ['puan', 'Puan', '📊'],
     ['sonuclar', 'Sonuçlar', '🏁'],
   ];
   if (ME.is_admin) items.push(['admin', 'Admin', '⚙️']);
@@ -257,6 +258,7 @@ async function render(view) {
     if (view === 'bulten') await renderBulten(el);
     else if (view === 'kuponlarim') await renderKuponlarim(el);
     else if (view === 'kullanicilar') await renderKullanicilar(el);
+    else if (view === 'puan') await renderPuan(el);
     else if (view === 'sonuclar') await renderSonuclar(el);
     else if (view === 'admin') await renderAdmin(el);
   } catch (err) {
@@ -589,6 +591,56 @@ async function renderUserDetail(uid) {
   }
 }
 
+// ----- Puan Durumu (gercek Premier Lig tablosu) -----
+async function renderPuan(el) {
+  let data;
+  try {
+    data = await api('/standings');
+  } catch (e) {
+    el.innerHTML = `<div class="empty">Puan durumu şu an alınamadı.<br><small style="color:var(--muted)">${e.message}</small></div>`;
+    return;
+  }
+  const table = data.table || [];
+  if (!table.length) {
+    el.innerHTML = '<div class="empty">Puan durumu verisi bulunamadı.</div>';
+    return;
+  }
+  const rows = table
+    .map((r) => {
+      const zone = r.pos <= 4 ? 'ucl' : r.pos <= 5 ? 'uel' : r.pos >= 18 ? 'rel' : '';
+      const gd = r.gd > 0 ? '+' + r.gd : String(r.gd);
+      return `<tr class="pd-row ${zone}">
+        <td class="pd-pos">${r.pos}</td>
+        <td class="pd-team">${crestEl(r.full || r.team)}<span class="pd-name">${r.team}</span></td>
+        <td>${r.played}</td>
+        <td class="pd-hide">${r.won}</td>
+        <td class="pd-hide">${r.draw}</td>
+        <td class="pd-hide">${r.lost}</td>
+        <td>${gd}</td>
+        <td class="pd-pts">${r.points}</td>
+      </tr>`;
+    })
+    .join('');
+  el.innerHTML = `
+    <div class="section-title">Puan Durumu <small>Premier Lig</small></div>
+    <div class="pd-wrap">
+      <table class="pd-table">
+        <thead><tr>
+          <th>#</th><th style="text-align:left">Takım</th>
+          <th>O</th><th class="pd-hide">G</th><th class="pd-hide">B</th><th class="pd-hide">M</th>
+          <th>AV</th><th>P</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div class="pd-legend">
+      <span><i class="dot ucl"></i>Şampiyonlar Ligi</span>
+      <span><i class="dot uel"></i>Avrupa Ligi</span>
+      <span><i class="dot rel"></i>Küme düşme</span>
+    </div>
+    <p class="foot-tz">Kaynak: football-data.org · O: oynanan, G: galibiyet, B: beraberlik, M: mağlubiyet, AV: averaj, P: puan</p>`;
+}
+
 // ----- Sonuclar -----
 async function renderSonuclar(el) {
   const { matches } = await api('/matches/results');
@@ -847,6 +899,16 @@ async function renderAdmin(el) {
     })
   );
 }
+
+// ---------- Acilis animasyonu kaldir ----------
+(function dismissSplash() {
+  const s = document.getElementById('splash');
+  if (!s) return;
+  setTimeout(() => {
+    s.classList.add('hide');
+    setTimeout(() => s.remove(), 500);
+  }, 3050);
+})();
 
 // ---------- Baslat ----------
 boot().catch(() => {
