@@ -11,6 +11,7 @@ create table if not exists users (
   is_admin      boolean not null default false,
   status        text not null default 'pending',   -- pending | approved | rejected
   balance       numeric not null default 0,
+  eliminated    boolean not null default false,     -- KURAL 13: bakiye yetersiz -> "Kaybetti"
   created_at    timestamptz not null default now()
 );
 

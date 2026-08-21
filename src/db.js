@@ -45,4 +45,18 @@ function ensureAdmin() {
   return adminReady;
 }
 
-module.exports = { sql, ensureAdmin };
+// Sema guncellemeleri (var olan Supabase veritabanina otomatik uygulanir).
+// KURAL 13 icin: elenmis (Kaybetti) oyuncu bayragi.
+let schemaReady = null;
+function ensureSchema() {
+  if (schemaReady) return schemaReady;
+  schemaReady = (async () => {
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS eliminated boolean NOT NULL DEFAULT false`;
+  })().catch((e) => {
+    schemaReady = null;
+    throw e;
+  });
+  return schemaReady;
+}
+
+module.exports = { sql, ensureAdmin, ensureSchema };

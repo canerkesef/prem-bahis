@@ -5,7 +5,7 @@ const express = require('express');
 const cookieParser = require('cookie-parser');
 const bcrypt = require('bcryptjs');
 
-const { sql, ensureAdmin } = require('../src/db');
+const { sql, ensureAdmin, ensureSchema } = require('../src/db');
 const { seedSampleMatches } = require('../src/seed');
 const { refreshMatches, refreshResults, hasApi } = require('../src/oddsApi');
 const { settleMatch, voidMatch } = require('../src/settle');
@@ -14,6 +14,10 @@ const { computeMarkets } = require('../src/odds-derive');
 const app = express();
 const SECRET = process.env.SESSION_SECRET || 'lutfen-bu-anahtari-degistir';
 const START_BALANCE = Number(process.env.START_BALANCE || 1000);
+// KURAL 1: Her maca en az bu kadar ASCU ile kupon yapilabilir.
+const MIN_STAKE = Number(process.env.MIN_STAKE || 50);
+// KURAL 2: Turnuva bu tarihte biter; bu andan sonra yeni kupon yapilamaz.
+const TOURNAMENT_END = process.env.TOURNAMENT_END || '2027-01-01T00:00:00+03:00';
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
 app.set('trust proxy', 1);
@@ -23,6 +27,7 @@ app.use(cookieParser(SECRET));
 // -------- Baslangic (instance basina bir kez) --------
 let initPromise = null;
 async function init() {
+  await ensureSchema();
   await ensureAdmin();
   if (!hasApi()) await seedSampleMatches();
 }
@@ -47,7 +52,7 @@ app.use('/api', async (req, res, next) => {
 async function currentUser(req) {
   const uid = req.signedCookies && req.signedCookies.uid;
   if (!uid) return null;
-  const rows = await sql`SELECT id, username, is_admin, status, balance FROM users WHERE id=${Number(uid)}`;
+  const rows = await sql`SELECT id, username, is_admin, status, balance, eliminated FROM users WHERE id=${Number(uid)}`;
   return rows[0] || null;
 }
 async function requireAuth(req, res, next) {
@@ -55,7 +60,7 @@ async function requireAuth(req, res, next) {
     const u = await currentUser(req);
     if (!u) return res.status(401).json({ error: 'Giris yapmalisiniz.' });
     if (u.status !== 'approved') return res.status(403).json({ error: 'Hesabiniz henuz onaylanmadi.' });
-    req.user = { id: Number(u.id), username: u.username, is_admin: !!u.is_admin, balance: Number(u.balance) };
+    req.user = { id: Number(u.id), username: u.username, is_admin: !!u.is_admin, balance: Number(u.balance), eliminated: !!u.eliminated };
     next();
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
@@ -122,8 +127,9 @@ app.post('/api/logout', (req, res) => {
 app.get('/api/me', async (req, res) => {
   try {
     const u = await currentUser(req);
-    if (!u) return res.json({ user: null });
-    res.json({ user: { id: Number(u.id), username: u.username, is_admin: !!u.is_admin, status: u.status, balance: Number(u.balance) } });
+    const config = { min_stake: MIN_STAKE, tournament_end: TOURNAMENT_END, no_bet_penalty: Number(process.env.NO_BET_PENALTY || 100) };
+    if (!u) return res.json({ user: null, config });
+    res.json({ user: { id: Number(u.id), username: u.username, is_admin: !!u.is_admin, status: u.status, balance: Number(u.balance), eliminated: !!u.eliminated }, config });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
   }
@@ -181,6 +187,14 @@ app.post('/api/coupons', requireAuth, async (req, res) => {
 
     if (!market || !selection) return res.status(400).json({ error: 'Gecersiz bahis secimi.' });
     if (!Number.isFinite(stake) || stake <= 0) return res.status(400).json({ error: 'Gecerli bir bahis tutari girin.' });
+    // KURAL 13: Elenmis (Kaybetti) oyuncu yeni kupon yapamaz.
+    if (req.user.eliminated) return res.status(400).json({ error: 'Bakiyeniz yetersiz kaldigi icin turnuvadan elendiniz (Kaybetti). Yeni kupon yapamazsiniz.' });
+    // KURAL 2: Turnuva bittiyse yeni kupon yok.
+    if (Date.now() >= new Date(TOURNAMENT_END).getTime()) {
+      return res.status(400).json({ error: 'Turnuva sona erdi (1 Ocak). Yeni kupon yapilamaz.' });
+    }
+    // KURAL 1: Minimum kupon tutari.
+    if (stake < MIN_STAKE) return res.status(400).json({ error: `Minimum kupon tutari ${MIN_STAKE} ASCU.` });
 
     const rows = await sql`SELECT * FROM matches WHERE id=${matchId} AND status='open'`;
     const match = rows[0];
@@ -249,8 +263,8 @@ function couponOut(c) {
 // ================= KULLANICILAR =================
 app.get('/api/users', requireAuth, async (req, res) => {
   try {
-    const rows = await sql`SELECT id, username, is_admin, balance FROM users WHERE status='approved' ORDER BY balance DESC`;
-    res.json({ users: rows.map((u) => ({ id: Number(u.id), username: u.username, is_admin: !!u.is_admin, balance: Number(u.balance) })) });
+    const rows = await sql`SELECT id, username, is_admin, balance, eliminated FROM users WHERE status='approved' ORDER BY balance DESC`;
+    res.json({ users: rows.map((u) => ({ id: Number(u.id), username: u.username, is_admin: !!u.is_admin, balance: Number(u.balance), eliminated: !!u.eliminated })) });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
   }
@@ -258,7 +272,7 @@ app.get('/api/users', requireAuth, async (req, res) => {
 
 app.get('/api/users/:id', requireAuth, async (req, res) => {
   try {
-    const rows = await sql`SELECT id, username, is_admin, balance, created_at FROM users WHERE id=${Number(req.params.id)} AND status='approved'`;
+    const rows = await sql`SELECT id, username, is_admin, balance, eliminated, created_at FROM users WHERE id=${Number(req.params.id)} AND status='approved'`;
     const u = rows[0];
     if (!u) return res.status(404).json({ error: 'Kullanici bulunamadi.' });
     const coupons = (await sql`SELECT * FROM coupons WHERE user_id=${Number(u.id)} ORDER BY created_at DESC`).map(couponOut);
@@ -272,7 +286,7 @@ app.get('/api/users/:id', requireAuth, async (req, res) => {
       },
       { total: 0, won: 0, lost: 0, pending: 0 }
     );
-    res.json({ user: { id: Number(u.id), username: u.username, is_admin: !!u.is_admin, balance: Number(u.balance), created_at: u.created_at }, coupons, stats });
+    res.json({ user: { id: Number(u.id), username: u.username, is_admin: !!u.is_admin, balance: Number(u.balance), eliminated: !!u.eliminated, created_at: u.created_at }, coupons, stats });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
   }
@@ -312,7 +326,7 @@ app.post('/api/admin/reset', requireAdmin, async (req, res) => {
     const alsoMatches = req.body && req.body.matches === true;
     await sql.begin(async (tx) => {
       await tx`DELETE FROM coupons`;
-      await tx`UPDATE users SET balance = ${START_BALANCE}`;
+      await tx`UPDATE users SET balance = ${START_BALANCE}, eliminated = false`;
       if (alsoMatches) {
         await tx`UPDATE matches SET status='open', home_score=NULL, away_score=NULL WHERE status IN ('settled','void')`;
       }
@@ -346,7 +360,7 @@ app.post('/api/admin/refresh-matches', requireAdmin, async (req, res) => {
 
 app.post('/api/admin/refresh-results', requireAdmin, async (req, res) => {
   try {
-    const r = await refreshResults((id, h, a) => settleMatch(id, h, a));
+    const r = await refreshResults((id, h, a, htH, htA) => settleMatch(id, h, a, htH, htA));
     if (!r.ok) return res.status(400).json(r);
     res.json(r);
   } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
@@ -358,7 +372,16 @@ app.post('/api/admin/matches/:id/settle', requireAdmin, async (req, res) => {
   if (!Number.isInteger(h) || !Number.isInteger(a) || h < 0 || a < 0) {
     return res.status(400).json({ error: 'Gecerli skor girin (0 veya uzeri tam sayi).' });
   }
-  try { res.json(await settleMatch(req.params.id, h, a)); }
+  // Devre (ilk yari) skoru istege bagli; girilirse ilk yari kuponlari da hesaplanir.
+  let htH = req.body.ht_home, htA = req.body.ht_away;
+  htH = htH === '' || htH == null ? null : Number(htH);
+  htA = htA === '' || htA == null ? null : Number(htA);
+  const haveHT = Number.isInteger(htH) && Number.isInteger(htA);
+  if (haveHT && (htH < 0 || htA < 0 || htH > h || htA > a)) {
+    return res.status(400).json({ error: 'Devre skoru gecersiz (0+ ve mac sonu skorundan buyuk olamaz).' });
+  }
+  const correct = req.body.correct === true; // KURAL 8: yonetici duzeltmesi
+  try { res.json(await settleMatch(req.params.id, h, a, haveHT ? htH : null, haveHT ? htA : null, { correct })); }
   catch (e) { res.status(400).json({ error: String(e.message || e) }); }
 });
 
@@ -395,7 +418,7 @@ app.all('/api/cron/refresh', async (req, res) => {
   if (req.headers.authorization !== `Bearer ${secret}`) return res.status(401).json({ error: 'Yetkisiz.' });
   try {
     const m = await refreshMatches();
-    const r = await refreshResults((id, h, a) => settleMatch(id, h, a));
+    const r = await refreshResults((id, h, a, htH, htA) => settleMatch(id, h, a, htH, htA));
     res.json({ ok: true, matches: m.count ?? null, settled: r.settled ?? null });
   } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });

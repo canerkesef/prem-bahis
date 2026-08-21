@@ -74,25 +74,24 @@ function computeMarkets(base) {
   const lh = Math.max(0.05, (mu + sSup) / 2);
   const la = Math.max(0.05, (mu - sSup) / 2);
 
-  // skor matrisi + normalizasyon
-  const M = [];
-  let tot = 0;
-  for (let i = 0; i <= MAX; i++) {
-    M[i] = [];
-    for (let j = 0; j <= MAX; j++) {
-      const p = pois(i, lh) * pois(j, la);
-      M[i][j] = p;
-      tot += p;
+  // Verilen gol beklentileriyle normalize skor matrisi kurar, kosul toplayici P dondurur.
+  const makeP = (LH, LA) => {
+    const M = [];
+    let tot = 0;
+    for (let i = 0; i <= MAX; i++) {
+      M[i] = [];
+      for (let j = 0; j <= MAX; j++) { const p = pois(i, LH) * pois(j, LA); M[i][j] = p; tot += p; }
     }
-  }
-  for (let i = 0; i <= MAX; i++) for (let j = 0; j <= MAX; j++) M[i][j] /= tot;
-
-  // kosulu saglayan hucrelerin olasilik toplami
-  const P = (pred) => {
-    let s = 0;
-    for (let i = 0; i <= MAX; i++) for (let j = 0; j <= MAX; j++) if (pred(i, j)) s += M[i][j];
-    return s;
+    for (let i = 0; i <= MAX; i++) for (let j = 0; j <= MAX; j++) M[i][j] /= tot;
+    const Pf = (pred) => {
+      let s = 0;
+      for (let i = 0; i <= MAX; i++) for (let j = 0; j <= MAX; j++) if (pred(i, j)) s += M[i][j];
+      return s;
+    };
+    Pf.M = M;
+    return Pf;
   };
+  const P = makeP(lh, la);
   const two = (obj) => obj; // okunabilirlik
 
   const mk = {};
@@ -164,12 +163,23 @@ function computeMarkets(base) {
   let listed = 0;
   for (const sc of CS_SCORES) {
     const [hi, aj] = sc.split('-').map(Number);
-    const p = M[hi][aj];
+    const p = P.M[hi][aj];
     listed += p;
     cs[sc] = price(p);
   }
   cs['diger'] = price(Math.max(0, 1 - listed));
   mk.cs = cs;
+
+  // --- Ilk Yari (devre) --- gol beklentisi ~%47; ayri matris.
+  // Ilk yari pazarlarinda marj biraz daha yuksek (gercek sitelerdeki gibi) -> oranlar daha makul.
+  const HT = makeP(lh * 0.45, la * 0.45);
+  const iyPrice = (p) => price(p, 0.16);
+  mk.iy_1x2 = {
+    '1': iyPrice(HT((i, j) => i > j)), X: iyPrice(HT((i, j) => i === j)), '2': iyPrice(HT((i, j) => i < j)),
+  };
+  mk.iy_ou05 = { over: iyPrice(HT((i, j) => i + j > 0.5)), under: iyPrice(HT((i, j) => i + j < 0.5)) };
+  mk.iy_ou15 = { over: iyPrice(HT((i, j) => i + j > 1.5)), under: iyPrice(HT((i, j) => i + j < 1.5)) };
+  mk.iy_btts = { yes: iyPrice(HT((i, j) => i > 0 && j > 0)), no: iyPrice(HT((i, j) => !(i > 0 && j > 0))) };
 
   return two(mk);
 }

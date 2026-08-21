@@ -84,30 +84,113 @@ async function refreshMatches() {
   return { ok: true, count };
 }
 
-// Tamamlanan maclarin skorlarini ceker ve kuponlari hesaplar.
-async function refreshResults(settleFn) {
-  if (!hasApi()) {
-    return { ok: false, error: 'ODDS_API_KEY tanimli degil.' };
-  }
-  const url = `${BASE}/sports/${SPORT}/scores/?apiKey=${apiKey()}&daysFrom=3&dateFormat=iso`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    return { ok: false, error: `The Odds API skor hatasi (${res.status}): ${body.slice(0, 200)}` };
-  }
-  const games = await res.json();
-  let settled = 0;
-  for (const g of games) {
-    if (!g.completed || !Array.isArray(g.scores)) continue;
-    const existing = await sql`SELECT id, status FROM matches WHERE id = ${g.id}`;
-    if (existing.length === 0 || existing[0].status === 'settled') continue;
-    const homeScore = Number(g.scores.find((s) => s.name === g.home_team)?.score);
-    const awayScore = Number(g.scores.find((s) => s.name === g.away_team)?.score);
-    if (Number.isNaN(homeScore) || Number.isNaN(awayScore)) continue;
-    await settleFn(g.id, homeScore, awayScore);
-    settled++;
-  }
-  return { ok: true, settled };
+// Takim adlarini karsilastirmak icin normalize eder ("Arsenal FC" == "Arsenal").
+function normName(s) {
+  return (s || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/\b(a?fc)\b/g, '')
+    .replace(/&|\band\b/g, '')
+    .replace(/[^a-z0-9]/g, '');
 }
 
-module.exports = { refreshMatches, refreshResults, hasApi };
+// football-data.org: bitmis maclarin mac sonu + ILK YARI skorlarini normName ile haritalar.
+async function fetchFootballData() {
+  const token = (process.env.FOOTBALL_DATA_TOKEN || '').trim();
+  if (!token) return { map: {}, error: null, has: false };
+  try {
+    const res = await fetch('https://api.football-data.org/v4/competitions/PL/matches?status=FINISHED', {
+      headers: { 'X-Auth-Token': token },
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      return { map: {}, has: false, error: `football-data hatasi (${res.status}): ${body.slice(0, 140)}` };
+    }
+    const data = await res.json();
+    const map = {};
+    for (const mt of data.matches || []) {
+      if (mt.status !== 'FINISHED') continue;
+      const ft = mt.score && mt.score.fullTime, ht = mt.score && mt.score.halfTime;
+      if (!ft || ft.home == null || ft.away == null) continue;
+      const key = normName(mt.homeTeam && mt.homeTeam.name) + '|' + normName(mt.awayTeam && mt.awayTeam.name);
+      map[key] = {
+        ftH: ft.home, ftA: ft.away,
+        htH: ht && Number.isInteger(ht.home) ? ht.home : null,
+        htA: ht && Number.isInteger(ht.away) ? ht.away : null,
+      };
+    }
+    return { map, has: true, error: null };
+  } catch (e) {
+    return { map: {}, has: false, error: String(e.message || e) };
+  }
+}
+
+// The Odds API: bitmis maclarin mac sonu skorlarini normName ile haritalar.
+async function fetchOddsScores() {
+  if (!hasApi()) return { map: {}, has: false, error: 'ODDS_API_KEY yok' };
+  try {
+    const res = await fetch(`${BASE}/sports/${SPORT}/scores/?apiKey=${apiKey()}&daysFrom=3&dateFormat=iso`);
+    if (!res.ok) return { map: {}, has: false, error: `Odds API skor hatasi (${res.status})` };
+    const games = await res.json();
+    const map = {};
+    for (const g of games) {
+      if (!g.completed || !Array.isArray(g.scores)) continue;
+      const h = Number(g.scores.find((s) => s.name === g.home_team)?.score);
+      const a = Number(g.scores.find((s) => s.name === g.away_team)?.score);
+      if (Number.isNaN(h) || Number.isNaN(a)) continue;
+      map[normName(g.home_team) + '|' + normName(g.away_team)] = { ftH: h, ftA: a };
+    }
+    return { map, has: true, error: null };
+  } catch (e) {
+    return { map: {}, has: false, error: String(e.message || e) };
+  }
+}
+
+// CIFT KAYNAK DOGRULAMA:
+// - Mac sonu skoru iki kaynakta AYNI ise otomatik sonuclandirilir (IY skoru football-data'dan).
+// - Farkli ise ya da tek kaynak varsa: sonuclandirilmaz, admin'e uyari dondurulur (elle girer).
+async function refreshResults(settleFn) {
+  const fd = await fetchFootballData();
+
+  // football-data token yoksa: dogrulama kapali -> tek kaynak (Odds API), ilk yari iade.
+  if (!fd.has) {
+    const oa = await fetchOddsScores();
+    if (!oa.has) return { ok: false, error: fd.error || oa.error || 'Skor kaynagi bulunamadi.' };
+    const openM = await sql`SELECT id, home_team, away_team FROM matches WHERE status='open'`;
+    let s = 0;
+    for (const m of openM) {
+      const o = oa.map[normName(m.home_team) + '|' + normName(m.away_team)];
+      if (o) { await settleFn(m.id, o.ftH, o.ftA); s++; }
+    }
+    return { ok: true, settled: s, conflicts: [], fdActive: false, fdError: fd.error };
+  }
+
+  const oa = await fetchOddsScores();
+  const open = await sql`SELECT id, home_team, away_team FROM matches WHERE status='open'`;
+
+  let settled = 0;
+  const conflicts = [];
+  for (const m of open) {
+    const key = normName(m.home_team) + '|' + normName(m.away_team);
+    const f = fd.map[key];   // {ftH,ftA,htH,htA}
+    const o = oa.map[key];   // {ftH,ftA}
+    const teams = `${m.home_team} - ${m.away_team}`;
+
+    if (f && o) {
+      if (f.ftH === o.ftH && f.ftA === o.ftA) {
+        await settleFn(m.id, f.ftH, f.ftA, f.htH, f.htA); // dogrulandi -> yaz (IY: football-data)
+        settled++;
+      } else {
+        conflicts.push({ id: m.id, teams, fd: `${f.ftH}-${f.ftA}`, odds: `${o.ftH}-${o.ftA}`, reason: 'skorlar farkli' });
+      }
+    } else if (f && !o) {
+      conflicts.push({ id: m.id, teams, fd: `${f.ftH}-${f.ftA}`, odds: '—', reason: 'Odds API skoru yok, doğrulanamadı' });
+    } else if (!f && o) {
+      conflicts.push({ id: m.id, teams, fd: '—', odds: `${o.ftH}-${o.ftA}`, reason: 'football-data skoru yok, doğrulanamadı' });
+    }
+    // ikisi de yoksa: mac muhtemelen bitmedi -> atla
+  }
+  return { ok: true, settled, conflicts, fdError: fd.error, oaError: oa.error, fdActive: fd.has };
+}
+
+module.exports = { refreshMatches, refreshResults, hasApi, normName };

@@ -108,6 +108,12 @@ const MARKET_GROUPS = [
     { key: 'oe', label: 'Toplam Gol Tek / Çift', cols: 2, sels: [['odd', 'Tek'], ['even', 'Çift']] },
     { key: 'goals_band', label: 'Toplam Gol Aralığı', cols: 4, sels: [['0-1', '0-1'], ['2-3', '2-3'], ['4-5', '4-5'], ['6+', '6+']] },
   ] },
+  { title: 'İlk Yarı', open: false, markets: [
+    { key: 'iy_1x2', label: 'İlk Yarı Sonucu', cols: 3, sels: [['1', 'Ev (1)'], ['X', 'Berabere (X)'], ['2', 'Dep (2)']] },
+    { key: 'iy_ou05', label: 'İlk Yarı Alt/Üst 0.5', cols: 2, sels: [['over', '0.5 Üst'], ['under', '0.5 Alt']] },
+    { key: 'iy_ou15', label: 'İlk Yarı Alt/Üst 1.5', cols: 2, sels: [['over', '1.5 Üst'], ['under', '1.5 Alt']] },
+    { key: 'iy_btts', label: 'İlk Yarı Karşılıklı Gol', cols: 2, sels: [['yes', 'KG Var'], ['no', 'KG Yok']] },
+  ] },
   { title: 'Takım Golleri', open: false, markets: [
     { key: 'h_ou05', label: 'Ev Sahibi Alt/Üst 0.5', cols: 2, sels: [['over', '0.5 Üst'], ['under', '0.5 Alt']] },
     { key: 'h_ou15', label: 'Ev Sahibi Alt/Üst 1.5', cols: 2, sels: [['over', '1.5 Üst'], ['under', '1.5 Alt']] },
@@ -144,6 +150,7 @@ for (const g of MARKET_GROUPS) {
 const STATUS_LABELS = { pending: 'Bekliyor', won: 'Kazandı', lost: 'Kaybetti', void: 'İptal' };
 
 let ME = null;
+let CONFIG = { min_stake: 50, tournament_end: '2027-01-01T00:00:00+03:00', no_bet_penalty: 100 };
 
 // ---------- Auth ekrani ----------
 $$('.tab').forEach((t) =>
@@ -214,7 +221,8 @@ function setActiveNav(view) {
 
 // ---------- Baslangic ----------
 async function boot() {
-  const { user } = await api('/me');
+  const { user, config } = await api('/me');
+  if (config) CONFIG = config;
   if (!user || user.status !== 'approved') {
     if (user && user.status === 'pending') setAuthMsg('Hesabınız henüz onaylanmadı.', true);
     $('#auth-screen').classList.remove('hidden');
@@ -265,12 +273,50 @@ async function renderBulten(el) {
   }
   el.innerHTML =
     `<div class="disclaimer">🎮 Arkadaşlar arası <b>eğlence oyunu</b> · Gerçek para <b>yoktur</b> · <b>ASCU</b> yalnızca sanal puandır · Bahis/kumar değildir</div>` +
+    rulesCard() +
     `<div class="section-title">Maçlar <small>${matches.length} maç</small></div>` +
     matches.map(matchCard).join('') +
     `<p class="foot-tz">Tüm saatler Türkiye saati ile gösterilmektedir · Maça dokun, oranlar açılsın</p>`;
   $$('.match-lite', el).forEach((row) =>
     row.addEventListener('click', () => openMatchPanel(row.dataset.mid))
   );
+}
+
+// Ana sayfadaki "Oyun Kuralları" karti (gruplu tam liste).
+function rulesCard() {
+  const min = CONFIG.min_stake, pen = CONFIG.no_bet_penalty;
+  const groups = [
+    ['Puan / Bakiye Kuralları', [
+      `Her maç için kupon oynama alt tutar limiti <b>${min} ASCU</b>'dur.`,
+      `Turnuva <b>1 Ocak</b> itibarı ile sonuçlanır; bakiyesi en yüksek olan kazanır.`,
+      `Kupon oynanmayan ve oynamaya kapatılmış <b>her maç için</b> hesaptan <b>${pen} ASCU</b> düşülür.`,
+      `Maç başladıktan sonra o maça bahis oynanamaz (bahis maç başlangıç saniyesinde kapanır).`,
+      `Eksi bakiyeye düşülemez; kupon için yeterli bakiye şartı aranır.`,
+      `Bakiyesi <b>${min} ASCU</b>'nun altına düşen ve bekleyen kuponu olmayan oyuncunun hesabı <b>"Kaybetti"</b> olarak güncellenir.`,
+      `Kupon oynandıktan sonra iptal veya değişiklik yapılamaz.`,
+    ]],
+    ['Maç Sonucu Kuralları', [
+      `Maç belirlenen süre içinde oynanmaz/ertelenirse o maça yapılan bahisler iade edilir.`,
+      `Maç yarım kalır veya sonuç resmî olarak kesinleşmezse bahisler iade edilir.`,
+      `Maç sonuçları resmî veri kaynağından alınır ve sistemce doğrulanır.`,
+      `Sistem bir maçı yanlış sonuçlandırırsa yönetici sonucu düzeltebilir.`,
+    ]],
+    ['Oyuncu / Davranış Kuralları', [
+      `Oyuncular birbirine ASCU borç veremez veya transfer edemez.`,
+      `Sistemde açık aramak, hata (bug) ile bakiye artırmak veya başkasının hesabını kullanmak yasaktır.`,
+      `Her oyuncu yalnızca kendi hesabından oynar.`,
+      `Anlaşmazlık durumunda son karar <b>yöneticiye</b> aittir.`,
+      `Kuralları ihlal eden oyuncuya ASCU cezası veya geçici bahis yasağı uygulanabilir.`,
+    ]],
+  ];
+  let n = 0;
+  const body = groups.map(([title, items]) =>
+    `<div class="rules-sub">${title}</div>` +
+    `<ol class="rules-list" start="${n + 1}">` +
+    items.map((t) => { n++; return `<li>${t}</li>`; }).join('') +
+    `</ol>`
+  ).join('');
+  return `<details class="rules-card"><summary class="rules-head">📋 Oyun Kuralları</summary>${body}</details>`;
 }
 
 function oddBtn(mid, market, sel, label, odd) {
@@ -380,8 +426,8 @@ async function openBet(mid, market, sel) {
     <div class="bet-teams">${m.home_team} vs ${m.away_team}</div>
     <div class="bet-pick">${MARKET_LABELS[market]} · ${PICK_LABELS[market][sel]} · Oran ${Number(odd).toFixed(2)}</div>
     <div class="bet-field">
-      <label>Bahis tutarı (ASCU) — Bakiye: ${fmtTL(ME.balance)}</label>
-      <input id="stake-input" type="number" min="1" step="1" placeholder="Örn. 100" inputmode="numeric" />
+      <label>Bahis tutarı (ASCU) — Bakiye: ${fmtTL(ME.balance)} · Min. ${CONFIG.min_stake}</label>
+      <input id="stake-input" type="number" min="${CONFIG.min_stake}" step="1" placeholder="En az ${CONFIG.min_stake}" inputmode="numeric" />
       <div class="quick">
         <button data-q="50">50</button><button data-q="100">100</button>
         <button data-q="250">250</button><button data-q="500">500</button>
@@ -406,6 +452,7 @@ async function openBet(mid, market, sel) {
   $('#place-bet').addEventListener('click', async () => {
     const stake = Number(stakeInput.value);
     if (!stake || stake <= 0) return toast('Geçerli bir tutar girin', true);
+    if (stake < CONFIG.min_stake) return toast(`Minimum kupon tutarı ${CONFIG.min_stake} ASCU`, true);
     try {
       const r = await api('/coupons', { method: 'POST', body: { match_id: mid, market, selection: sel, stake } });
       updateBalance(r.balance);
@@ -467,10 +514,11 @@ async function renderKullanicilar(el) {
     users
       .map((u, i) => {
         const goldRank = i === 0 ? 'gold' : '';
-        return `<div class="user-row" data-uid="${u.id}">
+        const elim = u.eliminated ? '<span class="elim-tag">Kaybetti</span>' : '';
+        return `<div class="user-row${u.eliminated ? ' user-elim' : ''}" data-uid="${u.id}">
           <div class="user-left">
             <div class="rank ${goldRank}">${i + 1}</div>
-            <div class="uname">${u.username}${u.is_admin ? '<span class="admin-tag">admin</span>' : ''}${u.id === ME.id ? ' <span style="color:var(--muted);font-size:12px">(sen)</span>' : ''}</div>
+            <div class="uname">${u.username}${u.is_admin ? '<span class="admin-tag">admin</span>' : ''}${elim}${u.id === ME.id ? ' <span style="color:var(--muted);font-size:12px">(sen)</span>' : ''}</div>
           </div>
           <div class="ubalance">${fmtTL(u.balance)}</div>
         </div>`;
@@ -503,7 +551,7 @@ async function renderUserDetail(uid) {
   el.innerHTML = `
     <button class="btn-ghost" id="back-btn" style="margin-bottom:14px">← Oyuncular</button>
     <div class="card">
-      <h3>${user.username}${user.is_admin ? '<span class="admin-tag">admin</span>' : ''}</h3>
+      <h3>${user.username}${user.is_admin ? '<span class="admin-tag">admin</span>' : ''}${user.eliminated ? '<span class="elim-tag">Kaybetti</span>' : ''}</h3>
       <div class="coupon-meta" style="margin:0">
         <span>Bakiye: <b style="color:var(--gold)">${fmtTL(user.balance)}</b></span>
         <span>Toplam kupon: <b>${stats.total}</b></span>
@@ -570,7 +618,10 @@ async function renderSonuclar(el) {
 
 // ----- Admin -----
 async function renderAdmin(el) {
-  const [{ pending }, { matches }] = await Promise.all([api('/admin/pending'), api('/matches')]);
+  const [{ pending }, { matches }, resultsResp] = await Promise.all([
+    api('/admin/pending'), api('/matches'), api('/matches/results'),
+  ]);
+  const settledMatches = (resultsResp.matches || []).filter((m) => m.status === 'settled');
 
   const pendingHtml = pending.length
     ? pending
@@ -592,9 +643,14 @@ async function renderAdmin(el) {
           (m) => `<div class="pending-row" style="flex-wrap:wrap">
             <span>${m.home_team} vs ${m.away_team} <small style="color:var(--muted)">${fmtDate(m.commence_time)}</small></span>
             <form class="settle-form" data-mid="${m.id}">
+              <span style="font-size:11px;color:var(--muted);width:100%">Maç sonu skoru:</span>
               <input type="number" min="0" placeholder="0" class="hs" />
               <span>-</span>
               <input type="number" min="0" placeholder="0" class="as" />
+              <span style="font-size:11px;color:var(--muted);width:100%;margin-top:4px">İlk yarı skoru (isteğe bağlı):</span>
+              <input type="number" min="0" placeholder="İY" class="ihs" />
+              <span>-</span>
+              <input type="number" min="0" placeholder="İY" class="ias" />
               <button type="submit" class="btn-sm btn-blue">Sonuçlandır</button>
               <button type="button" class="btn-sm btn-no" data-void="${m.id}">İptal</button>
             </form>
@@ -602,6 +658,28 @@ async function renderAdmin(el) {
         )
         .join('')
     : '<div style="color:var(--muted);font-size:13px">Açık maç yok.</div>';
+
+  // KURAL 8: Sonuclanan maclarin duzeltilmesi (yeniden sonuclandirma).
+  const correctHtml = settledMatches.length
+    ? settledMatches
+        .map(
+          (m) => `<div class="pending-row" style="flex-wrap:wrap">
+            <span>${m.home_team} vs ${m.away_team} <small style="color:var(--muted)">şu an: ${m.home_score}-${m.away_score}</small></span>
+            <form class="correct-form" data-mid="${m.id}">
+              <span style="font-size:11px;color:var(--muted);width:100%">Doğru maç sonu skoru:</span>
+              <input type="number" min="0" placeholder="0" class="chs" />
+              <span>-</span>
+              <input type="number" min="0" placeholder="0" class="cas" />
+              <span style="font-size:11px;color:var(--muted);width:100%;margin-top:4px">İlk yarı (isteğe bağlı):</span>
+              <input type="number" min="0" placeholder="İY" class="cihs" />
+              <span>-</span>
+              <input type="number" min="0" placeholder="İY" class="cias" />
+              <button type="submit" class="btn-sm btn-blue">Düzelt</button>
+            </form>
+          </div>`
+        )
+        .join('')
+    : '<div style="color:var(--muted);font-size:13px">Sonuçlanmış maç yok.</div>';
 
   el.innerHTML = `
     <div class="info-banner">
@@ -626,6 +704,15 @@ async function renderAdmin(el) {
     <div class="card">
       <h3>Maçları Elle Sonuçlandır</h3>
       <div id="settle-list">${matchesHtml}</div>
+    </div>
+
+    <div class="card">
+      <h3>✏️ Sonucu Düzelt (Kural 8)</h3>
+      <p style="color:var(--muted);font-size:13px;line-height:1.5;margin-bottom:12px">
+        Yanlış sonuçlanan maçı doğru skorla yeniden hesaplar. Kuponlar yeni skora göre
+        tekrar değerlendirilir; katılım cezası (Kural 3) tekrar uygulanmaz.
+      </p>
+      <div id="correct-list">${correctHtml}</div>
     </div>
 
     <div class="card">
@@ -674,7 +761,18 @@ async function renderAdmin(el) {
     msg.textContent = 'Çekiliyor…';
     try {
       const r = await api('/admin/refresh-results', { method: 'POST' });
-      msg.textContent = `${r.settled} maç sonuçlandı, kuponlar hesaplandı.`;
+      let html = `<b>${r.settled}</b> maç doğrulandı ve sonuçlandı.`;
+      if (r.fdActive === false) {
+        html += ' <span style="color:var(--muted)">(çift doğrulama kapalı — FOOTBALL_DATA_TOKEN eklenmemiş; ilk yarı kuponları iade edildi)</span>';
+      }
+      if (r.conflicts && r.conflicts.length) {
+        html += `<div style="margin-top:10px;background:#fce4ea;border:1px solid #f6d3de;border-radius:8px;padding:10px 12px;color:#9c2c4a">
+          <b>⚠️ ${r.conflicts.length} maçta skor doğrulanamadı — aşağıdan elle sonuçlandır:</b>` +
+          r.conflicts.map((c) => `<div style="margin-top:6px">• <b>${c.teams}</b><br><span style="font-size:12px">football-data: <b>${c.fd}</b> · Odds API: <b>${c.odds}</b> · <i>${c.reason}</i></span></div>`).join('') +
+          `</div>`;
+      }
+      if (r.fdError) html += `<div style="margin-top:8px;color:var(--danger);font-size:12px">football-data notu: ${r.fdError}</div>`;
+      msg.innerHTML = html;
       toast('Sonuçlar işlendi ✅');
       await refreshMe();
     } catch (e) {
@@ -704,10 +802,33 @@ async function renderAdmin(el) {
       e.preventDefault();
       const hs = Number($('.hs', f).value);
       const as = Number($('.as', f).value);
-      if (!Number.isInteger(hs) || !Number.isInteger(as)) return toast('Skor girin', true);
+      if (!Number.isInteger(hs) || !Number.isInteger(as)) return toast('Maç sonu skorunu girin', true);
+      const ihv = $('.ihs', f).value, iav = $('.ias', f).value;
+      const body = { home_score: hs, away_score: as };
+      if (ihv !== '' && iav !== '') { body.ht_home = Number(ihv); body.ht_away = Number(iav); }
       try {
-        await api(`/admin/matches/${f.dataset.mid}/settle`, { method: 'POST', body: { home_score: hs, away_score: as } });
+        await api(`/admin/matches/${f.dataset.mid}/settle`, { method: 'POST', body });
         toast('Maç sonuçlandı ✅');
+        render('admin');
+      } catch (err) {
+        toast(err.message, true);
+      }
+    })
+  );
+  // KURAL 8: Sonuc duzeltme
+  $$('.correct-form', el).forEach((f) =>
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const hs = Number($('.chs', f).value);
+      const as = Number($('.cas', f).value);
+      if (!Number.isInteger(hs) || !Number.isInteger(as)) return toast('Doğru skoru girin', true);
+      const ihv = $('.cihs', f).value, iav = $('.cias', f).value;
+      const body = { home_score: hs, away_score: as, correct: true };
+      if (ihv !== '' && iav !== '') { body.ht_home = Number(ihv); body.ht_away = Number(iav); }
+      if (!confirm('Bu maçın sonucunu düzeltmek istediğine emin misin? Kuponlar yeniden hesaplanacak.')) return;
+      try {
+        await api(`/admin/matches/${f.dataset.mid}/settle`, { method: 'POST', body });
+        toast('Sonuç düzeltildi ✅');
         render('admin');
       } catch (err) {
         toast(err.message, true);

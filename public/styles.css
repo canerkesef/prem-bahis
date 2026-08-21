@@ -142,6 +142,24 @@ input{font-family:inherit}
 .disclaimer{background:#fef3f6;border:1px solid #f6d3de;color:#9c2c4a;border-radius:10px;padding:10px 13px;font-size:12px;line-height:1.5;margin-bottom:14px;text-align:center}
 .disclaimer b{color:#7a1f38}
 
+/* ---------- Oyun Kurallari karti ---------- */
+.rules-card{background:#f7f3fc;border:1px solid #e4d7f3;border-radius:12px;padding:12px 15px;margin-bottom:16px}
+.rules-head{font-weight:700;color:var(--pri);font-size:14px;cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between}
+.rules-head::-webkit-details-marker{display:none}
+.rules-head::after{content:'▾';color:var(--pri);font-size:13px;transition:transform .2s}
+.rules-card[open] .rules-head::after{transform:rotate(180deg)}
+.rules-card[open] .rules-head{margin-bottom:6px}
+.rules-sub{font-weight:700;color:var(--pri2);font-size:12px;text-transform:uppercase;letter-spacing:.3px;margin:10px 0 4px}
+.rules-list{margin:0;padding-left:22px;color:#3d2a52;font-size:13px;line-height:1.6}
+.rules-list li{margin-bottom:5px}
+.rules-list li:last-child{margin-bottom:0}
+.rules-list b{color:var(--pri)}
+
+/* ---------- Elenme (Kaybetti) rozeti ---------- */
+.elim-tag{display:inline-block;background:#fdecec;color:#c0392b;border:1px solid #f3c6c6;border-radius:6px;font-size:11px;font-weight:700;padding:1px 7px;margin-left:6px;vertical-align:middle}
+.user-elim{opacity:.62}
+.user-elim .ubalance{color:#c0392b}
+
 /* ---------- Kompakt mac satiri (tiklanabilir) ---------- */
 .match-lite{cursor:pointer;transition:.12s}
 .match-lite:hover{border-color:var(--pri2);box-shadow:0 4px 16px rgba(61,25,91,.1)}
