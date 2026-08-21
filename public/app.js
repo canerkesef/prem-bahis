@@ -597,7 +597,15 @@ async function renderPuan(el) {
   try {
     data = await api('/standings');
   } catch (e) {
-    el.innerHTML = `<div class="empty">Puan durumu şu an alınamadı.<br><small style="color:var(--muted)">${e.message}</small></div>`;
+    const msg = String(e.message || '');
+    const tokenIssue = /token/i.test(msg) || /invalid/i.test(msg) || /\b40[013]\b/.test(msg) || /gerekli/i.test(msg);
+    let hint = '';
+    if (ME.is_admin) {
+      hint = tokenIssue
+        ? `<br><small style="color:var(--muted)">Admin: <b>football-data API anahtarı geçersiz</b> görünüyor. Vercel → Settings → Environment Variables → <code>FOOTBALL_DATA_TOKEN</code> değerini kontrol et (boşluksuz, Odds API anahtarıyla karıştırma) ve <b>yeniden Deploy</b> et.</small>`
+        : `<br><small style="color:var(--muted)">Admin: ${msg}</small>`;
+    }
+    el.innerHTML = `<div class="empty">Puan durumu şu an gösterilemiyor.${hint}</div>`;
     return;
   }
   const table = data.table || [];
@@ -906,6 +914,7 @@ async function renderAdmin(el) {
   if (!s) return;
   setTimeout(() => {
     s.classList.add('hide');
+    document.body.classList.remove('loading');
     setTimeout(() => s.remove(), 500);
   }, 3050);
 })();
