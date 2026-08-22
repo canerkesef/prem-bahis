@@ -52,6 +52,12 @@ function ensureSchema() {
   if (schemaReady) return schemaReady;
   schemaReady = (async () => {
     await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS eliminated boolean NOT NULL DEFAULT false`;
+    // Ilk yari skoru (sonradan doldurulabilir). NULL => devre skoru henuz islenmedi.
+    await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS ht_home integer`;
+    await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS ht_away integer`;
+    // Otomatik sonuclandirma icin: son otomatik yenileme zamani (soguma/kilit).
+    await sql`CREATE TABLE IF NOT EXISTS app_state (id int PRIMARY KEY, last_auto_settle timestamptz)`;
+    await sql`INSERT INTO app_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING`;
   })().catch((e) => {
     schemaReady = null;
     throw e;

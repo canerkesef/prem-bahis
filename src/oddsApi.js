@@ -191,7 +191,7 @@ async function fetchOddsScores() {
 // CIFT KAYNAK DOGRULAMA:
 // - Mac sonu skoru iki kaynakta AYNI ise otomatik sonuclandirilir (IY skoru football-data'dan).
 // - Farkli ise ya da tek kaynak varsa: sonuclandirilmaz, admin'e uyari dondurulur (elle girer).
-async function refreshResults(settleFn) {
+async function refreshResults(settleFn, applyHtFn) {
   const fd = await fetchFootballData();
 
   // football-data token yoksa: dogrulama kapali -> tek kaynak (Odds API), ilk yari iade.
@@ -232,7 +232,28 @@ async function refreshResults(settleFn) {
     }
     // ikisi de yoksa: mac muhtemelen bitmedi -> atla
   }
-  return { ok: true, settled, conflicts, fdError: fd.error, oaError: oa.error, fdActive: fd.has };
+
+  // ILK YARI TAMAMLAMA: sonuclanmis ama devre skoru islenmemis (ht_home NULL) maclar.
+  // football-data'da devre skoru varsa ve mac sonu skoru bizdekiyle ayniysa, IY'yi doldur.
+  let iyFixed = 0;
+  if (applyHtFn) {
+    const settledNoHt = await sql`
+      SELECT id, home_team, away_team, home_score, away_score
+      FROM matches WHERE status='settled' AND ht_home IS NULL`;
+    for (const m of settledNoHt) {
+      const f = fd.map[normName(m.home_team) + '|' + normName(m.away_team)];
+      if (!f || f.htH == null || f.htA == null) continue;         // football-data'da IY yok
+      if (f.ftH !== m.home_score || f.ftA !== m.away_score) {     // mac sonu tutmuyorsa dokunma
+        conflicts.push({ id: m.id, teams: `${m.home_team} - ${m.away_team}`,
+          fd: `${f.ftH}-${f.ftA}`, odds: `${m.home_score}-${m.away_score}`, reason: 'IY icin mac sonu skoru uyusmuyor' });
+        continue;
+      }
+      const r = await applyHtFn(m.id, f.htH, f.htA);
+      if (r && r.ok) iyFixed++;
+    }
+  }
+
+  return { ok: true, settled, iyFixed, conflicts, fdError: fd.error, oaError: oa.error, fdActive: fd.has };
 }
 
 module.exports = { refreshMatches, refreshResults, hasApi, normName, fetchStandings };

@@ -237,6 +237,15 @@ async function boot() {
   updateBalance(ME.balance);
   buildNav();
   render('bulten');
+  // Ucretsiz-guvenli otomatik sonuclandirma: bitmis maclar varsa arka planda tetikle.
+  api('/auto-settle', { method: 'POST' })
+    .then((r) => {
+      if (r && r.ran && ((r.settled || 0) + (r.iyFixed || 0)) > 0) {
+        refreshMe();
+        render('bulten');
+      }
+    })
+    .catch(() => {});
 }
 
 function updateBalance(b) {
@@ -822,6 +831,7 @@ async function renderAdmin(el) {
     try {
       const r = await api('/admin/refresh-results', { method: 'POST' });
       let html = `<b>${r.settled}</b> maç doğrulandı ve sonuçlandı.`;
+      if (r.iyFixed) html += ` <b>${r.iyFixed}</b> maçın ilk yarı skoru tamamlandı.`;
       if (r.fdActive === false) {
         html += ' <span style="color:var(--muted)">(çift doğrulama kapalı — FOOTBALL_DATA_TOKEN eklenmemiş; ilk yarı kuponları iade edildi)</span>';
       }

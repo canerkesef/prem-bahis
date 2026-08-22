@@ -8,7 +8,7 @@ const bcrypt = require('bcryptjs');
 const { sql, ensureAdmin, ensureSchema } = require('../src/db');
 const { seedSampleMatches } = require('../src/seed');
 const { refreshMatches, refreshResults, hasApi, fetchStandings } = require('../src/oddsApi');
-const { settleMatch, voidMatch } = require('../src/settle');
+const { settleMatch, voidMatch, applyHalfTime } = require('../src/settle');
 const { computeMarkets } = require('../src/odds-derive');
 
 const app = express();
@@ -369,10 +369,42 @@ app.post('/api/admin/refresh-matches', requireAdmin, async (req, res) => {
 
 app.post('/api/admin/refresh-results', requireAdmin, async (req, res) => {
   try {
-    const r = await refreshResults((id, h, a, htH, htA) => settleMatch(id, h, a, htH, htA));
+    const r = await refreshResults(
+      (id, h, a, htH, htA) => settleMatch(id, h, a, htH, htA),
+      (id, htH, htA) => applyHalfTime(id, htH, htA)
+    );
     if (!r.ok) return res.status(400).json(r);
     res.json(r);
   } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+
+// Kullanim-tetiklemeli otomatik sonuclandirma (ucretsiz-guvenli):
+// - Yalnizca bitmis ama sonuclanmamis / IY'si eksik mac varsa calisir.
+// - Atomik kilit + soguma suresi ile ayni anda birden fazla calismayi engeller.
+// - Sadece skor endpoint'ini kullanir (Odds API: 1 istek), gunluk limiti asmaz.
+async function maybeAutoSettle() {
+  const cd = Number(process.env.AUTO_SETTLE_COOLDOWN_MIN || 20);
+  const work = await sql`
+    SELECT 1 FROM matches
+    WHERE (status='open' AND commence_time < now() - interval '2 hours')
+       OR (status='settled' AND ht_home IS NULL)
+    LIMIT 1`;
+  if (!work.length) return { ran: false, reason: 'no-work' };
+  const claim = await sql`
+    UPDATE app_state SET last_auto_settle = now()
+    WHERE id=1 AND (last_auto_settle IS NULL OR last_auto_settle < now() - (${cd} * interval '1 minute'))
+    RETURNING id`;
+  if (!claim.length) return { ran: false, reason: 'cooldown' };
+  const r = await refreshResults(
+    (id, h, a, htH, htA) => settleMatch(id, h, a, htH, htA),
+    (id, htH, htA) => applyHalfTime(id, htH, htA)
+  );
+  return { ran: true, settled: r.settled || 0, iyFixed: r.iyFixed || 0 };
+}
+
+app.post('/api/auto-settle', requireAuth, async (req, res) => {
+  try { res.json(await maybeAutoSettle()); }
+  catch (e) { res.json({ ran: false, error: String(e.message || e) }); }
 });
 
 app.post('/api/admin/matches/:id/settle', requireAdmin, async (req, res) => {
@@ -427,8 +459,11 @@ app.all('/api/cron/refresh', async (req, res) => {
   if (req.headers.authorization !== `Bearer ${secret}`) return res.status(401).json({ error: 'Yetkisiz.' });
   try {
     const m = await refreshMatches();
-    const r = await refreshResults((id, h, a, htH, htA) => settleMatch(id, h, a, htH, htA));
-    res.json({ ok: true, matches: m.count ?? null, settled: r.settled ?? null });
+    const r = await refreshResults(
+      (id, h, a, htH, htA) => settleMatch(id, h, a, htH, htA),
+      (id, htH, htA) => applyHalfTime(id, htH, htA)
+    );
+    res.json({ ok: true, matches: m.count ?? null, settled: r.settled ?? null, iyFixed: r.iyFixed ?? null });
   } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 

@@ -23,6 +23,8 @@ create table if not exists matches (
   status        text not null default 'open', -- open | settled | void
   home_score    integer,
   away_score    integer,
+  ht_home       integer,   -- ilk yari (devre) skoru; NULL => henuz islenmedi
+  ht_away       integer,
   markets       jsonb,   -- tum bahis pazarlari ve oranlari
   last_update   timestamptz not null default now()
 );

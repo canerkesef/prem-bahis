@@ -96,7 +96,8 @@ async function settleMatch(matchId, homeScore, awayScore, htHome = null, htAway 
     }
 
     await tx`
-      UPDATE matches SET status='settled', home_score=${homeScore}, away_score=${awayScore}
+      UPDATE matches SET status='settled', home_score=${homeScore}, away_score=${awayScore},
+        ht_home=${haveHT ? htHome : null}, ht_away=${haveHT ? htAway : null}
       WHERE id=${matchId}`;
 
     const coupons = await tx`
@@ -139,6 +140,39 @@ async function settleMatch(matchId, homeScore, awayScore, htHome = null, htAway 
   return { ok: true, corrected: wasSettled && correct };
 }
 
+// Zaten sonuclanmis ama ILK YARI skoru islenmemis (ht_home NULL) bir maca,
+// sonradan (ornegin football-data'dan) gelen devre skorunu uygular:
+// iade edilmis (void) ilk yari kuponlarini yeni devre skoruna gore hesaplar.
+// Mac sonu kuponlarina dokunmaz. Skor stored FT ile ayni kalir.
+async function applyHalfTime(matchId, htHome, htAway) {
+  if (!Number.isInteger(htHome) || !Number.isInteger(htAway)) return { ok: false, error: 'Devre skoru gecersiz' };
+  const rows = await sql`SELECT status, ht_home FROM matches WHERE id=${matchId}`;
+  if (!rows.length) return { ok: false, error: 'Mac bulunamadi' };
+  if (rows[0].status !== 'settled') return { ok: false, error: 'Mac sonuclanmamis' };
+  if (rows[0].ht_home != null) return { ok: false, error: 'Ilk yari zaten islenmis' };
+
+  let iyCount = 0;
+  await sql.begin(async (tx) => {
+    const iy = await tx`
+      SELECT id, user_id, market, selection, stake, potential_win
+      FROM coupons WHERE match_id=${matchId} AND market LIKE 'iy_%' AND status='void'`;
+    for (const c of iy) {
+      // Onceki iadeyi geri al, sonra devre skoruna gore hesapla.
+      await tx`UPDATE users SET balance = GREATEST(balance - ${c.stake}, 0) WHERE id=${c.user_id}`;
+      if (isWinner(c.market, c.selection, htHome, htAway)) {
+        await tx`UPDATE coupons SET status='won', settled_at=now() WHERE id=${c.id}`;
+        await tx`UPDATE users SET balance = balance + ${c.potential_win} WHERE id=${c.user_id}`;
+      } else {
+        await tx`UPDATE coupons SET status='lost', settled_at=now() WHERE id=${c.id}`;
+      }
+      iyCount++;
+    }
+    await tx`UPDATE matches SET ht_home=${htHome}, ht_away=${htAway} WHERE id=${matchId}`;
+    await recomputeEliminations(tx);
+  });
+  return { ok: true, iyCount };
+}
+
 // Maci iptal eder (void) ve tum bekleyen kuponlarin bahsini iade eder.
 async function voidMatch(matchId) {
   const found = await sql`SELECT id FROM matches WHERE id = ${matchId}`;
@@ -159,4 +193,4 @@ async function voidMatch(matchId) {
   return { ok: true };
 }
 
-module.exports = { settleMatch, voidMatch };
+module.exports = { settleMatch, voidMatch, applyHalfTime };
