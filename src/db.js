@@ -58,6 +58,11 @@ function ensureSchema() {
     // Otomatik sonuclandirma icin: son otomatik yenileme zamani (soguma/kilit).
     await sql`CREATE TABLE IF NOT EXISTS app_state (id int PRIMARY KEY, last_auto_settle timestamptz)`;
     await sql`INSERT INTO app_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING`;
+    // Liderlik takibi: mevcut lider ve ne zamandan beri lider oldugu.
+    await sql`ALTER TABLE app_state ADD COLUMN IF NOT EXISTS leader_id bigint`;
+    await sql`ALTER TABLE app_state ADD COLUMN IF NOT EXISTS leader_since timestamptz`;
+    // Her oyuncunun TOPLAM liderlik suresi (milisaniye; gecmis tum donemler dahil).
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS leader_ms bigint NOT NULL DEFAULT 0`;
   })().catch((e) => {
     schemaReady = null;
     throw e;

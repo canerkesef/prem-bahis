@@ -518,24 +518,75 @@ function couponCard(c) {
 }
 
 // ----- Kullanicilar -----
+function statsLine(u) {
+  return `<div class="user-stats">
+    <span class="ust ok" title="Kazanan kupon">✅ ${u.won}</span>
+    <span class="ust no" title="Kaybeden kupon">❌ ${u.lost}</span>
+    <span class="ust wait" title="Bekleyen kupon">⏳ ${u.pending}</span>
+    <span class="ust miss" title="Kaçırılan (kupon yapılmayan) maç">🚫 ${u.missed}</span>
+    <span class="ust odds" title="Tutturulan toplam oran">🎯 ${Number(u.won_odds || 0).toFixed(2)}</span>
+  </div>`;
+}
+
+// Ikon aciklamalari (tablonun ustunde tek satir).
+function statLegend() {
+  return `<div class="stat-legend">
+    <span>✅ Kazanan</span><span>❌ Kaybeden</span><span>⏳ Bekleyen</span>
+    <span>🚫 Kaçırılan maç</span><span>🎯 Toplam oran</span></div>`;
+}
+
+function championCard(u, leaderDays) {
+  const you = u.id === ME.id ? '<span class="you-badge">SEN</span>' : '';
+  const elim = u.eliminated ? '<span class="elim-tag">Kaybetti</span>' : '';
+  const days = Number(leaderDays) || 0;
+  const total = Number(u.leader_total_days) || 0;
+  const daysTxt = days >= 1 ? `🔥 ${days} gündür lider` : 'bugün lider oldu';
+  const totalTxt = total >= 1 ? `<span class="champ-total"><span class="logo-ico cat-bg"></span> toplam ${total} gün lider</span>` : '';
+  return `<div class="champion" data-uid="${u.id}">
+    <div class="champ-glow"></div>
+    <span class="champ-logo cat-bg" role="img" aria-label="Premier Lig"></span>
+    <div class="champ-name">${u.username}${u.is_admin ? '<span class="admin-tag">admin</span>' : ''}${you}${elim}</div>
+    <div class="champ-bal">${fmtTL(u.balance)}</div>
+    <div class="champ-days">${daysTxt}</div>
+    ${totalTxt}
+    ${statsLine(u)}
+  </div>`;
+}
+
+function playerRow(u, rank, leadBal) {
+  const bal = Number(u.balance) || 0;
+  const pct = leadBal > 0 ? Math.max(3, Math.round((bal / leadBal) * 100)) : 0;
+  const gap = Math.round(leadBal - bal);
+  const medal = rank === 2 ? 'silver' : rank === 3 ? 'bronze' : '';
+  const you = u.id === ME.id ? ' <span class="you-tag">(sen)</span>' : '';
+  const elim = u.eliminated ? '<span class="elim-tag">Kaybetti</span>' : '';
+  return `<div class="prow${u.eliminated ? ' user-elim' : ''}${u.id === ME.id ? ' prow-you' : ''}" data-uid="${u.id}">
+    <div class="prow-top">
+      <div class="prow-left">
+        <div class="rank ${medal}">${rank}</div>
+        <div class="pinfo">
+          <div class="uname">${u.username}${u.is_admin ? '<span class="admin-tag">admin</span>' : ''}${elim}${you}${Number(u.leader_total_days) >= 1 ? `<span class="lead-badge" title="Toplam liderlik süresi"><span class="logo-ico cat-bg"></span>${u.leader_total_days}g</span>` : ''}</div>
+          <div class="pgap">Lidere fark: <b>-${fmtTL(gap)}</b></div>
+        </div>
+      </div>
+      <div class="ubalance">${fmtTL(u.balance)}</div>
+    </div>
+    <div class="race"><i style="width:${pct}%"></i></div>
+    ${statsLine(u)}
+  </div>`;
+}
+
 async function renderKullanicilar(el) {
-  const { users } = await api('/users');
+  const { users, leaderDays } = await api('/users');
+  if (!users.length) { el.innerHTML = '<div class="empty">Henüz oyuncu yok.</div>'; return; }
+  const leadBal = Number(users[0].balance) || 0;
+  const rest = users.slice(1).map((u, i) => playerRow(u, i + 2, leadBal)).join('');
   el.innerHTML =
-    `<div class="section-title">Oyuncular <small>bakiyeye göre sıralı</small></div>` +
-    users
-      .map((u, i) => {
-        const goldRank = i === 0 ? 'gold' : '';
-        const elim = u.eliminated ? '<span class="elim-tag">Kaybetti</span>' : '';
-        return `<div class="user-row${u.eliminated ? ' user-elim' : ''}" data-uid="${u.id}">
-          <div class="user-left">
-            <div class="rank ${goldRank}">${i + 1}</div>
-            <div class="uname">${u.username}${u.is_admin ? '<span class="admin-tag">admin</span>' : ''}${elim}${u.id === ME.id ? ' <span style="color:var(--muted);font-size:12px">(sen)</span>' : ''}</div>
-          </div>
-          <div class="ubalance">${fmtTL(u.balance)}</div>
-        </div>`;
-      })
-      .join('');
-  $$('.user-row', el).forEach((r) => r.addEventListener('click', () => renderUserDetail(r.dataset.uid)));
+    `<div class="section-title">🏆 Şampiyonluk Yarışı <small>1 Ocak'ta bakiyesi en yüksek olan kazanır</small></div>` +
+    statLegend() +
+    championCard(users[0], leaderDays) +
+    rest;
+  $$('.champion, .prow', el).forEach((r) => r.addEventListener('click', () => renderUserDetail(r.dataset.uid)));
 }
 
 async function renderUserDetail(uid) {

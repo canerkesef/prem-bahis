@@ -274,8 +274,71 @@ function couponOut(c) {
 // ================= KULLANICILAR =================
 app.get('/api/users', requireAuth, async (req, res) => {
   try {
-    const rows = await sql`SELECT id, username, is_admin, balance, eliminated FROM users WHERE status='approved' ORDER BY balance DESC`;
-    res.json({ users: rows.map((u) => ({ id: Number(u.id), username: u.username, is_admin: !!u.is_admin, balance: Number(u.balance), eliminated: !!u.eliminated })) });
+    // 1) Mevcut lideri (en yuksek bakiye) bul ve liderlik takibini guncelle.
+    //    Lider degistiyse: eski liderin gecen suresini TOPLAM liderligine ekle,
+    //    yeni lider icin sayaci sifirla. Ayni anda cift saymayi FOR UPDATE onler.
+    const topRow = await sql`SELECT id FROM users WHERE status='approved' ORDER BY balance DESC, id ASC LIMIT 1`;
+    let leaderId = null, leaderSince = null, leaderDays = 0;
+    if (topRow.length) {
+      const topId = Number(topRow[0].id);
+      await sql.begin(async (tx) => {
+        const [st] = await tx`SELECT leader_id, leader_since FROM app_state WHERE id=1 FOR UPDATE`;
+        const cur = st && st.leader_id != null ? Number(st.leader_id) : null;
+        if (cur !== topId || !st.leader_since) {
+          if (cur != null && st.leader_since) {
+            await tx`UPDATE users SET leader_ms = COALESCE(leader_ms,0)
+              + (EXTRACT(EPOCH FROM (now() - ${st.leader_since})) * 1000)::bigint WHERE id=${cur}`;
+          }
+          await tx`UPDATE app_state SET leader_id=${topId}, leader_since=now() WHERE id=1`;
+        }
+      });
+      const [st2] = await sql`SELECT leader_id, leader_since FROM app_state WHERE id=1`;
+      leaderId = Number(st2.leader_id);
+      leaderSince = st2.leader_since;
+      leaderDays = Math.max(0, Math.floor((Date.now() - new Date(leaderSince).getTime()) / 86400000));
+    }
+
+    // 2) Oyuncular (guncel leader_ms ile).
+    const rows = await sql`SELECT id, username, is_admin, balance, eliminated, COALESCE(leader_ms,0) AS leader_ms FROM users WHERE status='approved' ORDER BY balance DESC`;
+
+    // Kupon istatistikleri (kazanan/kaybeden/bekleyen + tutturulan toplam oran).
+    const stats = await sql`
+      SELECT user_id,
+        COUNT(*) FILTER (WHERE status='won')     AS won,
+        COUNT(*) FILTER (WHERE status='lost')    AS lost,
+        COUNT(*) FILTER (WHERE status='pending') AS pending,
+        COALESCE(SUM(odd) FILTER (WHERE status='won'), 0) AS won_odds
+      FROM coupons GROUP BY user_id`;
+    const statMap = {};
+    for (const s of stats) statMap[Number(s.user_id)] = s;
+
+    // Kacirilan mac = kupon oynanmamis sonuclanmis mac sayisi.
+    const totalSettledRow = await sql`SELECT COUNT(*)::int AS n FROM matches WHERE status='settled'`;
+    const totalSettled = totalSettledRow[0].n;
+    const played = await sql`
+      SELECT c.user_id, COUNT(DISTINCT c.match_id)::int AS n
+      FROM coupons c JOIN matches m ON m.id = c.match_id AND m.status='settled'
+      GROUP BY c.user_id`;
+    const playedMap = {};
+    for (const p of played) playedMap[Number(p.user_id)] = p.n;
+
+    const now = Date.now();
+    const users = rows.map((u) => {
+      const id = Number(u.id);
+      const s = statMap[id] || {};
+      const ongoing = id === leaderId && leaderSince ? now - new Date(leaderSince).getTime() : 0;
+      const totalLeaderDays = Math.floor((Number(u.leader_ms) + ongoing) / 86400000);
+      return {
+        id, username: u.username, is_admin: !!u.is_admin,
+        balance: Number(u.balance), eliminated: !!u.eliminated,
+        won: Number(s.won || 0), lost: Number(s.lost || 0), pending: Number(s.pending || 0),
+        won_odds: Math.round(Number(s.won_odds || 0) * 100) / 100,
+        missed: Math.max(totalSettled - (playedMap[id] || 0), 0),
+        leader_total_days: totalLeaderDays,
+      };
+    });
+
+    res.json({ users, leaderDays });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
   }
@@ -337,9 +400,10 @@ app.post('/api/admin/reset', requireAdmin, async (req, res) => {
     const alsoMatches = req.body && req.body.matches === true;
     await sql.begin(async (tx) => {
       await tx`DELETE FROM coupons`;
-      await tx`UPDATE users SET balance = ${START_BALANCE}, eliminated = false`;
+      await tx`UPDATE users SET balance = ${START_BALANCE}, eliminated = false, leader_ms = 0`;
+      await tx`UPDATE app_state SET leader_id = NULL, leader_since = NULL WHERE id=1`;
       if (alsoMatches) {
-        await tx`UPDATE matches SET status='open', home_score=NULL, away_score=NULL WHERE status IN ('settled','void')`;
+        await tx`UPDATE matches SET status='open', home_score=NULL, away_score=NULL, ht_home=NULL, ht_away=NULL WHERE status IN ('settled','void')`;
       }
     });
     res.json({ ok: true });
