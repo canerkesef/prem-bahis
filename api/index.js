@@ -152,6 +152,8 @@ function matchOut(m) {
     status: m.status,
     home_score: m.home_score,
     away_score: m.away_score,
+    ht_home: m.ht_home,
+    ht_away: m.ht_away,
     odds: parseMarkets(m.markets),
   };
 }

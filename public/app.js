@@ -671,13 +671,20 @@ async function renderSonuclar(el) {
       .map((m) => {
         const voided = m.status === 'void';
         const score = voided ? 'İPTAL' : `${m.home_score} - ${m.away_score}`;
+        const hasIY = m.ht_home != null && m.ht_away != null;
+        const iy = voided
+          ? ''
+          : `<div class="iy-line">İY: ${hasIY ? `<b>${m.ht_home} - ${m.ht_away}</b>` : '<span class="iy-missing">—</span>'}</div>`;
         return `<div class="match">
           <div class="fixture">
             <div class="teams-col">
               <div class="team-row">${crestEl(m.home_team)}<span class="team-name">${m.home_team}</span></div>
               <div class="team-row">${crestEl(m.away_team)}<span class="team-name">${m.away_team}</span></div>
             </div>
-            <div class="kick" style="font-size:20px;font-weight:800;color:${voided ? 'var(--muted)' : 'var(--pri)'}">${score}</div>
+            <div class="score-col">
+              <div class="kick" style="font-size:20px;font-weight:800;color:${voided ? 'var(--muted)' : 'var(--pri)'}">${score}</div>
+              ${iy}
+            </div>
           </div>
           <div class="market-label" style="margin-top:8px">${fmtDate(m.commence_time)}</div>
         </div>`;
