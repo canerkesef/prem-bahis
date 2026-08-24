@@ -343,6 +343,10 @@ function matchCard(m) {
   const k = fmtKick(m.commence_time);
   const oneline = (v) => (v ? Number(v).toFixed(2) : '-');
   const started = new Date(m.commence_time).getTime() <= Date.now();
+  const mine = Number(m.my_bets) || 0;
+  const betBadge = mine > 0
+    ? `<div class="bet-done">✓ Kupon yaptınız${mine > 1 ? ` <b>(${mine})</b>` : ''}</div>`
+    : '';
 
   const fixture = `
     <div class="fixture">
@@ -356,6 +360,7 @@ function matchCard(m) {
 
   if (started) {
     return `<div class="match match-live">
+      ${betBadge}
       ${fixture}
       <div class="live-row">
         <span class="live-badge"><span class="live-dot"></span>CANLI</span>
@@ -365,6 +370,7 @@ function matchCard(m) {
   }
 
   return `<div class="match match-lite" data-mid="${m.id}">
+    ${betBadge}
     ${fixture}
     <div class="lite-ms">
       <span class="ms-pill"><i>1</i>${oneline(ms['1'])}</span>

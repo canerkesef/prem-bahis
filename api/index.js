@@ -164,7 +164,11 @@ function num(v) {
 app.get('/api/matches', requireAuth, async (req, res) => {
   try {
     const rows = await sql`SELECT * FROM matches WHERE status='open' ORDER BY commence_time ASC`;
-    res.json({ matches: rows.map(matchOut) });
+    // Kullanicinin daha once kupon yaptigi maclar (bilgilendirme rozeti icin).
+    const mine = await sql`SELECT match_id, COUNT(*)::int AS n FROM coupons WHERE user_id=${req.user.id} GROUP BY match_id`;
+    const cmap = {};
+    for (const c of mine) cmap[c.match_id] = c.n;
+    res.json({ matches: rows.map((m) => { const o = matchOut(m); o.my_bets = cmap[m.id] || 0; return o; }) });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
   }
