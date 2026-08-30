@@ -311,18 +311,13 @@ async function renderBulten(el) {
 
 // ----- Canli skor: PAYLASIMLI onbellekten okur (10 sn'de bir) -----
 let liveTimer = null;
-function liveLabel(info, kickMs) {
+function liveLabel(info) {
   const s = info.status;
   if (s === 'PAUSED') return 'DEVRE ARASI';
   if (s === 'FINISHED') return 'BİTTİ';
-  // IN_PLAY: football-data dakikayi verdiyse onu; vermediyse baslama saatinden tahmini (~).
-  let min = info.minute, approx = false;
-  if (min == null && kickMs) {
-    const e = Math.floor((Date.now() - kickMs) / 60000);
-    if (e >= 0 && e < 160) { min = e; approx = true; }
-  }
-  if (min == null) return 'CANLI';
-  return `CANLI · ${approx ? '~' : ''}${min}'`;
+  // Dakikayi SADECE veri kaynagi gercekten verirse goster; tahmin etme.
+  if (info.minute != null) return `CANLI · ${info.minute}'`;
+  return 'CANLI';
 }
 async function updateLiveScores() {
   try {
@@ -332,8 +327,7 @@ async function updateLiveScores() {
       const el = document.querySelector(`.live-score[data-live="${id}"]`);
       const lbl = document.querySelector(`[data-livelbl="${id}"]`);
       if (el && info.h != null && info.a != null) el.textContent = `${info.h} - ${info.a}`;
-      const kickMs = el ? Number(el.dataset.kick) || 0 : 0;
-      if (lbl) lbl.textContent = liveLabel(info, kickMs);
+      if (lbl) lbl.textContent = liveLabel(info);
     });
   } catch (_) {}
 }
