@@ -275,6 +275,20 @@ input{font-family:inherit}
 .sr-h2h-i b{display:block;color:var(--ink);font-size:12px}
 .sr-h2h-i span{color:var(--muted);font-size:10px}
 .sr-note{color:var(--muted);font-size:11px;font-style:italic;margin-top:8px}
+/* Son 5 lig maci formu (G/B/M) */
+.sr-form{display:flex;flex-direction:column;gap:8px;margin-top:4px}
+.sr-form-row{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+.sr-fteam{font-size:13px;font-weight:700;color:var(--ink);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sr-fdots{display:flex;gap:5px;flex-shrink:0}
+.form-dot{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;font-size:11px;font-weight:800;color:#fff;font-style:normal}
+.form-dot.g{background:#12a05c}
+.form-dot.b{background:#9a97ad}
+.form-dot.m{background:#e23155}
+.form-na{color:var(--muted);font-size:12px}
+.sr-formlegend{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:8px;color:var(--muted);font-size:10.5px}
+.sr-formlegend span{display:inline-flex;align-items:center;gap:5px}
+.sr-formlegend .form-dot{width:16px;height:16px;font-size:9px}
+.sr-formhint{font-style:italic}
 .sr-foot{color:var(--muted);font-size:10px;text-align:center;margin-top:16px;border-top:1px solid var(--line);padding-top:10px;line-height:1.5}
 
 /* ---------- Mac onizleme raporu (panel) ---------- */

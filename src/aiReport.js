@@ -169,7 +169,7 @@ async function understatLeague(season) {
     const t = data[k]; const hist = t.history || []; const gp = hist.length;
     const xg = hist.reduce((s, h) => s + Number(h.xG || 0), 0);
     const xga = hist.reduce((s, h) => s + Number(h.xGA || 0), 0);
-    byName[normName(t.title)] = { gp, xgPer: gp ? xg / gp : null, xgaPer: gp ? xga / gp : null };
+    byName[normName(t.title)] = { gp, xgPer: gp ? xg / gp : null, xgaPer: gp ? xga / gp : null, hist };
   }
   return byName;
 }
@@ -196,7 +196,19 @@ async function understatXG(match) {
   if (!h && !a) return null;
   const f = (x) => (x && x.xgPer != null ? x.xgPer.toFixed(2) : 'veri yok');
   const fa = (x) => (x && x.xgaPer != null ? x.xgaPer.toFixed(2) : 'veri yok');
-  return { xg: `${f(h)} — ${f(a)} (${period})`, xga: `${fa(h)} — ${fa(a)} (${period})` };
+  // Son 5 lig maci formu (G/B/M), en eski -> en yeni.
+  const formOf = (x) => {
+    if (!x || !x.hist) return null;
+    const last = x.hist.filter((h) => h.result).sort((p, q) => new Date(p.date) - new Date(q.date)).slice(-5);
+    if (!last.length) return null;
+    return last.map((h) => (h.result === 'w' ? 'G' : h.result === 'd' ? 'B' : 'M'));
+  };
+  return {
+    xg: `${f(h)} — ${f(a)} (${period})`,
+    xga: `${fa(h)} — ${fa(a)} (${period})`,
+    formHome: formOf(h),
+    formAway: formOf(a),
+  };
 }
 
 // ---------- COK KAYNAKLI birlestirici (tek siteye bagimli degil) ----------
@@ -204,7 +216,7 @@ function withTimeout(p, ms) {
   return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
 }
 async function gatherFacts(match) {
-  const facts = { referee: null, stadium: null, injuries: null, h2h: [], h2h_note: null, xg: null, xga: null };
+  const facts = { referee: null, stadium: null, injuries: null, h2h: [], h2h_note: null, xg: null, xga: null, formHome: null, formAway: null };
   const [fd, af, us] = await Promise.all([
     withTimeout(fdFacts(match), 12000).catch(() => null),      // football-data (guncel sezon)
     withTimeout(fetchFacts(match), 12000).catch(() => null),   // API-Football (yedek H2H/sakat)
@@ -218,7 +230,7 @@ async function gatherFacts(match) {
     facts.injuries = facts.injuries || af.injuries;
     if (!facts.h2h.length && af.h2h && af.h2h.length) facts.h2h = af.h2h;
   }
-  if (us) { facts.xg = us.xg; facts.xga = us.xga; }
+  if (us) { facts.xg = us.xg; facts.xga = us.xga; facts.formHome = us.formHome; facts.formAway = us.formAway; }
   return facts;
 }
 
@@ -391,6 +403,7 @@ HAZIR GERÇEKLER (kaynaklardan çekildi — DEĞİŞTİRME, olduğu gibi kullan)
 - Son maçlar (H2H): ${h2hStr}
 - xG maç başı (Understat): ${facts.xg || 'yok'}
 - xGA maç başı (Understat): ${facts.xga || 'yok'}
+- Son 5 lig formu (G/B/M, eski→yeni) ev: ${(facts.formHome && facts.formHome.join(' ')) || 'yok'} | dep: ${(facts.formAway && facts.formAway.join(' ')) || 'yok'}
 
 ÖNEMLİ: Yukarıdaki "HAZIR GERÇEKLER"de dolu olan alanları (hakem, xG, xGA, H2H, eksik) AYNEN kullan, tekrar arama. SADECE "yok" olan alanları GOOGLE ARAMASI ile GERÇEK kaynaklardan tamamla. ÖNCELİKLE sofascore.com'a bak (bu maçın ve iki takımın SofaScore sayfaları; sakat/eksik oyuncu, hakem, pres/PPDA için en iyi kaynak). SofaScore'da bulamazsan sırayla fbref.com, understat, whoscored, transfermarkt, premierleague.com kaynaklarına bak. Aramaları "SofaScore ${match.home_team} ${match.away_team}", "SofaScore ${match.home_team} sakatlıklar", "${match.home_team} ${match.away_team} hakem" gibi yap. Her satırı ELİNDEN GELDİĞİNCE DOLDUR:
 1) xG (maç başı): önce ${seasonStr} sezonu; sezon başıysa/az maç oynanmışsa ${prevStr} sezon ortalamasını kullan ve parantezle belirt. Örn: "1.75 — 1.60 (${prevStr})".
@@ -440,6 +453,10 @@ async function generateReportFor(match) {
   if (nums.kg) g.push({ label: 'KG VAR İHTİMALİ', pct: Math.round(nums.kg.yes) });
   report.gauges = g;
   if (facts.h2h.length) report.h2h = facts.h2h;
+  // Son 5 lig maci formu (Understat'tan; deterministik olarak eklenir).
+  if (facts.formHome || facts.formAway) {
+    report.form = { homeTeam: match.home_team, awayTeam: match.away_team, home: facts.formHome || [], away: facts.formAway || [] };
+  }
   // Bos ("veri yok") satirlari hic gosterme.
   report.data = stripEmpty(report.data);
   report.extras = stripEmpty(report.extras);

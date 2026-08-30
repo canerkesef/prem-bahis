@@ -464,6 +464,22 @@ function srGauge(g) {
   const p = Math.max(0, Math.min(100, Math.round(Number(g.pct) || 0)));
   return `<div class="sr-gauge" style="--p:${p}"><div class="sr-ginner"><div class="sr-gnum">%${p}</div><div class="sr-glbl">${g.label || ''}</div></div></div>`;
 }
+function srFormChips(arr) {
+  if (!arr || !arr.length) return '<span class="form-na">veri yok</span>';
+  return arr.map((x) => {
+    const cls = x === 'G' ? 'g' : x === 'B' ? 'b' : 'm';
+    return `<span class="form-dot ${cls}">${x}</span>`;
+  }).join('');
+}
+function srForm(f) {
+  if (!f || (!(f.home && f.home.length) && !(f.away && f.away.length))) return '';
+  return `<div class="sr-sec">SON 5 LİG MAÇI</div>
+    <div class="sr-form">
+      <div class="sr-form-row"><span class="sr-fteam">${f.homeTeam || ''}</span><span class="sr-fdots">${srFormChips(f.home)}</span></div>
+      <div class="sr-form-row"><span class="sr-fteam">${f.awayTeam || ''}</span><span class="sr-fdots">${srFormChips(f.away)}</span></div>
+    </div>
+    <div class="sr-formlegend"><span><i class="form-dot g">G</i>Galibiyet</span><span><i class="form-dot b">B</i>Beraberlik</span><span><i class="form-dot m">M</i>Mağlubiyet</span><span class="sr-formhint">en solda en eski</span></div>`;
+}
 function sahaReportHtml(r, m) {
   if (!r) return '';
   const meta = r.meta || {};
@@ -477,7 +493,7 @@ function sahaReportHtml(r, m) {
     ${srClean(r.data).length ? S('MAÇ VERİLERİ') + srRows(r.data) : ''}
     ${r.gauges && r.gauges.length ? `<div class="sr-gauges">${r.gauges.map(srGauge).join('')}</div>` : ''}
     ${r.conclusion ? `<div class="sr-concl"><div class="sr-cl">RAPORUN SONUCU</div><div class="sr-ct">${r.conclusion.title || ''}</div>${r.conclusion.note ? `<div class="sr-cn">${r.conclusion.note}</div>` : ''}</div>` : ''}
-    ${r.h2h && r.h2h.length ? S('SON KARŞILAŞMALAR') + `<div class="sr-h2h">${r.h2h.map((x) => `<div class="sr-h2h-i"><b>${x.res || ''}</b><span>${x.when || ''}</span></div>`).join('')}</div>` + (r.h2h_note ? `<div class="sr-note">${r.h2h_note}</div>` : '') : ''}
+    ${r.form ? srForm(r.form) : ''}
     ${srClean(r.extras).length ? S('EK VERİLER') + srRows(r.extras) : ''}
     ${r.why ? S('NEDEN BU SONUÇ?') + `<p class="sr-p">${r.why}</p>` : ''}
     ${r.footer ? `<div class="sr-foot">${r.footer}</div>` : ''}
