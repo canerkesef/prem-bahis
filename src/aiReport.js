@@ -217,6 +217,20 @@ SADECE şu JSON'u döndür (başka metin yok):
 "footer":"Bu rapor istatistiksel analiz içerir; kesin sonuç garantisi vermez."}`;
 }
 
+// Bir deger "bos/veri yok" mu? (satiri tamamen gizlemek icin)
+function isEmptyVal(v) {
+  if (v == null) return true;
+  const s = String(v).trim();
+  if (!s) return true;
+  if (/^(veri yok|bilinmiyor|yok|null|undefined|-|—|–|n\/a)$/i.test(s)) return true;
+  // "Aston Villa — Arsenal | veri yok" gibi: rakam icermiyorsa ve "veri yok" geciyorsa bos say
+  if (/veri yok|bilinmiyor/i.test(s) && !/\d/.test(s)) return true;
+  return false;
+}
+function stripEmpty(rows) {
+  return (rows || []).filter((r) => Array.isArray(r) && !isEmptyVal(r[1]));
+}
+
 async function generateReportFor(match) {
   const nums = deriveNumbers(match.markets);
   const facts = await fetchFacts(match);
@@ -227,12 +241,18 @@ async function generateReportFor(match) {
   if (nums.kg) g.push({ label: 'KG VAR İHTİMALİ', pct: Math.round(nums.kg.yes) });
   report.gauges = g;
   if (facts.h2h.length) report.h2h = facts.h2h;
+  // Bos ("veri yok") satirlari hic gosterme.
+  report.data = stripEmpty(report.data);
+  report.extras = stripEmpty(report.extras);
+  if (report.h2h_note && isEmptyVal(report.h2h_note)) report.h2h_note = null;
   await sql`UPDATE matches SET report=${JSON.stringify(report)}::jsonb, report_at=now() WHERE id=${match.id}`;
   return report;
 }
 
 async function generatePending(opts = {}) {
-  const days = Number(process.env.REPORT_DAYS || opts.days || 2);
+  // Rapor MAC GUNU uretilir: bugun (TR) baslayan ve henuz baslamamis maclar.
+  // REPORT_DAYS ile pencere buyutulebilir (varsayilan 1 = sadece bugun).
+  const days = Math.max(1, Number(process.env.REPORT_DAYS || opts.days || 1));
   const budgetMs = Number(opts.budgetMs || 45000);
   if (!(process.env.GEMINI_API_KEY || '').trim()) return { ok: false, error: 'GEMINI_API_KEY yok' };
   const claim = await sql`UPDATE app_state SET report_lock=now()
@@ -241,9 +261,11 @@ async function generatePending(opts = {}) {
   const started = Date.now();
   let generated = 0; const errors = [];
   try {
+    // TR takvimine gore bugunun sonu (yarin 00:00 TR). days>1 ise ileri gunler de dahil.
     const rows = await sql`SELECT id, home_team, away_team, commence_time, markets
       FROM matches WHERE status='open' AND report IS NULL
-        AND commence_time > now() AND commence_time < now() + (${days} * interval '1 day')
+        AND commence_time > now()
+        AND commence_time < ((date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') + (${days} * interval '1 day')) AT TIME ZONE 'Europe/Istanbul')
       ORDER BY commence_time ASC`;
     for (const m of rows) {
       if (Date.now() - started > budgetMs) break;

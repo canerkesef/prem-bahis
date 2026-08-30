@@ -895,9 +895,18 @@ function matchPreviewHtml(p) {
 }
 
 // PDF tarzi "Saha Raporu" (koyu/altin) — zamanlanmis gorevin urettigi raporu gosterir.
+function srEmptyVal(v) {
+  if (v == null) return true;
+  const s = String(v).trim();
+  if (!s) return true;
+  if (/^(veri yok|bilinmiyor|yok|null|undefined|-|—|–|n\/a)$/i.test(s)) return true;
+  if (/veri yok|bilinmiyor/i.test(s) && !/\d/.test(s)) return true;
+  return false;
+}
+function srClean(rows) { return (rows || []).filter((r) => Array.isArray(r) && !srEmptyVal(r[1])); }
 function srRows(rows) {
-  return (rows || []).map(([k, v]) =>
-    `<div class="sr-row"><span class="sr-k">${k}</span><span class="sr-v">${v != null && v !== '' ? v : '<i>veri yok</i>'}</span></div>`).join('');
+  return srClean(rows).map(([k, v]) =>
+    `<div class="sr-row"><span class="sr-k">${k}</span><span class="sr-v">${v}</span></div>`).join('');
 }
 function srGauge(g) {
   const p = Math.max(0, Math.min(100, Math.round(Number(g.pct) || 0)));
@@ -913,11 +922,11 @@ function sahaReportHtml(r, m) {
     ${metaLine ? `<div class="sr-meta">${metaLine}</div>` : ''}
     <div class="sr-teams"><span class="sr-tn">${m.home_team}</span><span class="sr-vs">VS</span><span class="sr-tn sr-right">${m.away_team}</span></div>
     ${r.intro ? `<p class="sr-p">${r.intro}</p>` : ''}
-    ${r.data && r.data.length ? S('MAÇ VERİLERİ') + srRows(r.data) : ''}
+    ${srClean(r.data).length ? S('MAÇ VERİLERİ') + srRows(r.data) : ''}
     ${r.gauges && r.gauges.length ? `<div class="sr-gauges">${r.gauges.map(srGauge).join('')}</div>` : ''}
     ${r.conclusion ? `<div class="sr-concl"><div class="sr-cl">RAPORUN SONUCU</div><div class="sr-ct">${r.conclusion.title || ''}</div>${r.conclusion.note ? `<div class="sr-cn">${r.conclusion.note}</div>` : ''}</div>` : ''}
     ${r.h2h && r.h2h.length ? S('SON KARŞILAŞMALAR') + `<div class="sr-h2h">${r.h2h.map((x) => `<div class="sr-h2h-i"><b>${x.res || ''}</b><span>${x.when || ''}</span></div>`).join('')}</div>` + (r.h2h_note ? `<div class="sr-note">${r.h2h_note}</div>` : '') : ''}
-    ${r.extras && r.extras.length ? S('EK VERİLER') + srRows(r.extras) : ''}
+    ${srClean(r.extras).length ? S('EK VERİLER') + srRows(r.extras) : ''}
     ${r.why ? S('NEDEN BU SONUÇ?') + `<p class="sr-p">${r.why}</p>` : ''}
     ${r.footer ? `<div class="sr-foot">${r.footer}</div>` : ''}
   </div>`;
