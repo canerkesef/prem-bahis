@@ -9,12 +9,7 @@ const { sql } = require('./db');
 const { normName } = require('./oddsApi');
 
 const GEMINI_SEARCH = process.env.AI_WEB_SEARCH !== '0';
-let RESOLVED_MODEL = null; // ilk calisan model bulununca onbellege alinir
-function modelCandidates() {
-  const env = (process.env.GEMINI_MODEL || '').trim();
-  return [...new Set([env, 'gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.5-flash-preview-05-20',
-    'gemini-2.0-flash-lite', 'gemini-1.5-flash'].filter(Boolean))];
-}
+let RESOLVED_MODEL = null; // ilk calisan {ver, model} bulununca onbellege alinir
 const AF_BASE = 'https://v3.football.api-sports.io';
 const AF_LEAGUE = 39; // Premier League
 
@@ -97,63 +92,87 @@ function extractJson(text) {
   if (i < 0 || j < 0 || j <= i) return null;
   try { return JSON.parse(text.slice(i, j + 1)); } catch (_) { return null; }
 }
-// Hesabin gercekten destekledigi modeli Google'dan sor (ad tahmini yok).
-async function discoverModel(key) {
-  try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
-    if (!res.ok) return null;
-    const j = await res.json();
-    const ok = (j.models || [])
-      .filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'))
-      .map((m) => (m.name || '').replace(/^models\//, ''))
-      .filter(Boolean);
-    if (!ok.length) return null;
-    const env = (process.env.GEMINI_MODEL || '').trim();
-    if (env && ok.includes(env)) return env;
-    // flash tercih et (hizli/ucuz), yoksa herhangi biri
-    return ok.find((n) => /flash/i.test(n) && !/(vision|thinking|image|tts|embedding)/i.test(n))
-      || ok.find((n) => /flash/i.test(n)) || ok[0];
-  } catch (_) { return null; }
+// Hesabin gercekten destekledigi modelleri Google'dan sor (ad tahmini yok).
+// Hem v1beta hem v1 ListModels denenir; hangi API surumu calisiyorsa o kullanilir.
+async function listModels(key, ver) {
+  const url = `https://generativelanguage.googleapis.com/${ver}/models?key=${key}&pageSize=100`;
+  const res = await fetch(url);
+  const txt = await res.text().catch(() => '');
+  if (!res.ok) return { ver, ok: false, status: res.status, err: txt.slice(0, 200), names: [] };
+  let j; try { j = JSON.parse(txt); } catch (_) { return { ver, ok: false, status: res.status, err: 'JSON parse', names: [] }; }
+  const names = (j.models || [])
+    .filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'))
+    .map((m) => (m.name || '').replace(/^models\//, ''))
+    .filter(Boolean);
+  return { ver, ok: true, status: res.status, names };
+}
+function pickModel(names) {
+  const env = (process.env.GEMINI_MODEL || '').trim();
+  if (env && names.includes(env)) return env;
+  const bad = /(vision|thinking|image|tts|audio|embedding|learnlm|aqa|gemma)/i;
+  // Once flash (hizli/ucuz), sonra pro, sonra herhangi biri
+  return names.find((n) => /flash/i.test(n) && !bad.test(n))
+    || names.find((n) => /flash/i.test(n))
+    || names.find((n) => /pro/i.test(n) && !bad.test(n))
+    || names.find((n) => !bad.test(n))
+    || names[0] || null;
 }
 
-async function geminiCall(key, model, prompt, useSearch) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+async function genContent(key, ver, model, prompt, useSearch) {
+  const url = `https://generativelanguage.googleapis.com/${ver}/models/${model}:generateContent?key=${key}`;
   const body = { contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.4, maxOutputTokens: 1800 } };
   if (useSearch) body.tools = [{ google_search: {} }];
   const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const txt = await res.text().catch(() => '');
   return { status: res.status, ok: res.ok, txt };
 }
+
+// Calisan {ver, model} ciftini gercek ListModels ciktisindan cozer.
+async function resolveModel(key) {
+  const diag = [];
+  for (const ver of ['v1beta', 'v1']) {
+    const r = await listModels(key, ver);
+    if (!r.ok) { diag.push(`${ver} ListModels ${r.status}: ${r.err}`); continue; }
+    if (!r.names.length) { diag.push(`${ver}: generateContent destekleyen model yok`); continue; }
+    const model = pickModel(r.names);
+    if (model) return { ver, model, all: r.names, diag };
+    diag.push(`${ver}: uygun model secilemedi (${r.names.slice(0, 6).join(', ')})`);
+  }
+  return { ver: null, model: null, all: [], diag };
+}
+
 async function callGemini(prompt) {
   const key = (process.env.GEMINI_API_KEY || '').trim();
   if (!key) throw new Error('GEMINI_API_KEY tanimli degil.');
-  let models;
-  if (RESOLVED_MODEL) models = [RESOLVED_MODEL];
+
+  let ver, model, diag = [];
+  if (RESOLVED_MODEL) { ({ ver, model } = RESOLVED_MODEL); }
   else {
-    const found = await discoverModel(key);
-    models = [...new Set([found, ...modelCandidates()].filter(Boolean))];
-  }
-  let lastErr = 'Uygun model bulunamadi';
-  for (const model of models) {
-    for (const useSearch of (GEMINI_SEARCH ? [true, false] : [false])) {
-      const r = await geminiCall(key, model, prompt, useSearch);
-      if (r.ok) {
-        let data; try { data = JSON.parse(r.txt); } catch (_) { data = {}; }
-        const parts = (((data.candidates || [])[0] || {}).content || {}).parts || [];
-        const rep = extractJson(parts.map((p) => p.text || '').join('\n'));
-        if (!rep) { lastErr = 'Gemini yaniti JSON olarak cozulemedi'; continue; }
-        RESOLVED_MODEL = model; // calisan modeli hatirla
-        return rep;
-      }
-      lastErr = `(${model}${useSearch ? '+arama' : ''}) ${r.status}: ${r.txt.slice(0, 140)}`;
-      const modelGone = r.status === 404 || /not\s*found|no longer available|is not supported|models\//i.test(r.txt);
-      if (modelGone) break;            // bu model yok -> sonraki modele gec
-      const toolIssue = /google_search|tool|grounding/i.test(r.txt);
-      if (!toolIssue) break;           // model sorunu degil, arama da degil -> sonraki model
-      // arama sorunu ise: aramasiz tekrar dene (ust dongu)
+    const r = await resolveModel(key);
+    ver = r.ver; model = r.model; diag = r.diag;
+    if (!model) {
+      throw new Error(`Gemini modeli bulunamadi. Anahtarin gecerli mi ve "Generative Language API" acik mi? Ayrinti: ${diag.join(' | ') || 'ListModels bos'}`);
     }
   }
-  throw new Error(`Gemini API hatasi: ${lastErr}`);
+
+  let lastErr = '';
+  for (const useSearch of (GEMINI_SEARCH ? [true, false] : [false])) {
+    const r = await genContent(key, ver, model, prompt, useSearch);
+    if (r.ok) {
+      let data; try { data = JSON.parse(r.txt); } catch (_) { data = {}; }
+      const parts = (((data.candidates || [])[0] || {}).content || {}).parts || [];
+      const rep = extractJson(parts.map((p) => p.text || '').join('\n'));
+      if (!rep) { lastErr = 'Gemini yaniti JSON olarak cozulemedi'; continue; }
+      RESOLVED_MODEL = { ver, model }; // calisan cifti hatirla
+      return rep;
+    }
+    lastErr = `(${ver}/${model}${useSearch ? '+arama' : ''}) ${r.status}: ${r.txt.slice(0, 160)}`;
+    // Arama araci sorunu ise aramasiz tekrar denenir (ust dongu); degilse cikilir.
+    const toolIssue = /google_search|tool|grounding|function/i.test(r.txt);
+    if (!toolIssue) break;
+  }
+  const hint = diag.length ? ` [ListModels: ${diag.join(' | ')}]` : '';
+  throw new Error(`Gemini API hatasi: ${lastErr}${hint}`);
 }
 
 function buildPrompt(match, nums, facts) {
