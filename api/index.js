@@ -9,6 +9,7 @@ const { sql, ensureAdmin, ensureSchema } = require('../src/db');
 const { seedSampleMatches } = require('../src/seed');
 const { refreshMatches, refreshResults, hasApi, fetchStandings, normName } = require('../src/oddsApi');
 const { settleMatch, voidMatch, applyHalfTime } = require('../src/settle');
+const { generatePending } = require('../src/aiReport');
 const { computeMarkets } = require('../src/odds-derive');
 
 const app = express();
@@ -259,6 +260,17 @@ app.post('/api/report/:id', reportAuth, async (req, res) => {
     if (!upd.length) return res.status(404).json({ error: 'Mac bulunamadi.' });
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+
+// AI ile rapor üretimi: admin elle tetikler (test/ilk doldurma).
+app.post('/api/admin/generate-reports', requireAdmin, async (req, res) => {
+  try { res.json(await generatePending({ budgetMs: 55000 })); }
+  catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+// Kullanim-tetiklemeli üretim (fire-and-forget; kilitli, bütçeli).
+app.post('/api/generate-report', requireAuth, async (req, res) => {
+  try { res.json(await generatePending({ budgetMs: 45000 })); }
+  catch (e) { res.json({ ok: false, error: String(e.message || e) }); }
 });
 
 // Admin: Saha Raporu yaz/sil (admin oturumuyla; tarayicidan yapistirma icin).
@@ -635,7 +647,9 @@ app.all('/api/cron/refresh', async (req, res) => {
       (id, h, a, htH, htA) => settleMatch(id, h, a, htH, htA),
       (id, htH, htA) => applyHalfTime(id, htH, htA)
     );
-    res.json({ ok: true, matches: m.count ?? null, settled: r.settled ?? null, iyFixed: r.iyFixed ?? null });
+    let reports = null;
+    try { reports = (await generatePending({ budgetMs: 50000 })).generated; } catch (_) {}
+    res.json({ ok: true, matches: m.count ?? null, settled: r.settled ?? null, iyFixed: r.iyFixed ?? null, reports });
   } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 

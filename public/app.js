@@ -246,6 +246,8 @@ async function boot() {
       }
     })
     .catch(() => {});
+  // Eksik AI raporlarını arka planda üret (kilitli/bütçeli; sonucu beklemez).
+  api('/generate-report', { method: 'POST' }).catch(() => {});
 }
 
 function updateBalance(b) {
@@ -909,9 +911,16 @@ async function renderAdmin(el) {
     </div>
 
     <div class="card">
-      <h3>📊 Saha Raporu Yapıştır</h3>
+      <h3>🤖 Saha Raporu (AI)</h3>
       <p style="color:var(--muted);font-size:13px;line-height:1.5;margin-bottom:10px">
-        Maçı seç, Claude'un verdiği rapor JSON'unu aşağıya yapıştır ve kaydet. Maça dokununca panelde görünür.
+        Yaklaşan maçlar için raporu <b>otomatik</b> üretir (oranlar siteden, xG/eksik/H2H web'den). Her gün gece 00:00'da kendi de çalışır.
+      </p>
+      <div class="admin-tools" style="margin-bottom:6px">
+        <button class="btn-sm btn-blue" id="ai-gen">🤖 Eksik Raporları Üret</button>
+      </div>
+      <div id="ai-msg" style="margin:6px 0 12px;font-size:13px;color:var(--muted)"></div>
+      <p style="color:var(--muted);font-size:12px;line-height:1.5;margin-bottom:10px">
+        Elle de ekleyebilirsin: maçı seç, JSON yapıştır, kaydet.
       </p>
       <select id="rep-match" style="width:100%;background:var(--bg);border:1px solid var(--line);color:var(--ink);padding:10px;border-radius:8px;font-size:14px;margin-bottom:8px">
         ${matches.map((m) => `<option value="${m.id}">${m.home_team} - ${m.away_team}</option>`).join('')}
@@ -1065,6 +1074,22 @@ async function renderAdmin(el) {
       }
     })
   );
+
+  // AI ile eksik raporları üret
+  if ($('#ai-gen')) $('#ai-gen').addEventListener('click', async () => {
+    const am = $('#ai-msg');
+    am.style.color = 'var(--muted)'; am.textContent = 'Üretiliyor… (birkaç dakika sürebilir, sayfada kal)';
+    try {
+      const r = await api('/admin/generate-reports', { method: 'POST' });
+      if (r.error) { am.style.color = 'var(--danger)'; am.textContent = r.error; return; }
+      let t = `${r.generated || 0} rapor üretildi.`;
+      if (r.skipped === 'locked') t = 'Şu an başka bir üretim sürüyor, birazdan tekrar dene.';
+      if (r.errors && r.errors.length) t += ' Hatalar: ' + r.errors.join(' | ');
+      am.style.color = (r.errors && r.errors.length) ? 'var(--danger)' : 'var(--ok)';
+      am.textContent = t;
+      toast('AI rapor üretimi bitti');
+    } catch (e) { am.style.color = 'var(--danger)'; am.textContent = e.message; }
+  });
 
   // Saha Raporu yapıştır / kaydet / sil
   const repMsg = $('#rep-msg');
