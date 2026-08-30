@@ -68,6 +68,10 @@ function ensureSchema() {
     await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS report_at timestamptz`;
     // AI rapor uretimi icin kilit (ayni anda cift uretimi engeller).
     await sql`ALTER TABLE app_state ADD COLUMN IF NOT EXISTS report_lock timestamptz`;
+    // Canli skor icin PAYLASIMLI onbellek (kisi bazli degil): 10 sn TTL + kilit.
+    await sql`ALTER TABLE app_state ADD COLUMN IF NOT EXISTS live_scores jsonb`;
+    await sql`ALTER TABLE app_state ADD COLUMN IF NOT EXISTS live_scores_at timestamptz`;
+    await sql`ALTER TABLE app_state ADD COLUMN IF NOT EXISTS live_lock timestamptz`;
   })().catch((e) => {
     schemaReady = null;
     throw e;

@@ -352,6 +352,8 @@ input{font-family:inherit}
 .live-badge{display:inline-flex;align-items:center;gap:7px;background:#fce4ea;color:var(--danger);font-weight:800;font-size:12.5px;letter-spacing:.4px;padding:5px 12px;border-radius:20px}
 .live-dot{width:8px;height:8px;border-radius:50%;background:var(--danger);animation:pulse 1.2s infinite}
 .live-note{color:var(--muted);font-size:12px}
+.live-score{font-weight:800;font-size:16px;color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:.5px;min-width:44px}
+.live-score:empty{display:none}
 @keyframes pulse{0%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.65)}100%{opacity:1;transform:scale(1)}}
 
 /* ---------- Oran paneli (asagidan kayan) ---------- */

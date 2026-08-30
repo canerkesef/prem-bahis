@@ -269,6 +269,7 @@ async function refreshMe() {
 
 // ---------- Render ----------
 async function render(view) {
+  if (view !== 'bulten') stopLivePolling(); // baska sekmeye gecince canli yoklamayi durdur
   setActiveNav(view);
   const el = $('#view');
   el.innerHTML = '<div class="spinner">Yükleniyor…</div>';
@@ -303,7 +304,42 @@ async function renderBulten(el) {
   $$('.match-lite', el).forEach((row) =>
     row.addEventListener('click', () => openMatchPanel(row.dataset.mid))
   );
+  // Baslamis (canli olabilecek) mac varsa canli skoru yoklamaya basla.
+  const hasStarted = matches.some((m) => new Date(m.commence_time).getTime() <= Date.now() && m.status === 'open');
+  if (hasStarted) startLivePolling(); else stopLivePolling();
 }
+
+// ----- Canli skor: PAYLASIMLI onbellekten okur (10 sn'de bir) -----
+let liveTimer = null;
+async function updateLiveScores() {
+  try {
+    const { live } = await api('/live');
+    Object.keys(live || {}).forEach((id) => {
+      const info = live[id] || {};
+      const el = document.querySelector(`.live-score[data-live="${id}"]`);
+      const lbl = document.querySelector(`[data-livelbl="${id}"]`);
+      if (el && info.h != null && info.a != null) el.textContent = `${info.h} - ${info.a}`;
+      if (lbl) {
+        const s = info.status;
+        lbl.textContent = s === 'PAUSED' ? 'DEVRE ARASI' : s === 'FINISHED' ? 'BİTTİ' : 'CANLI';
+      }
+    });
+  } catch (_) {}
+}
+function startLivePolling() {
+  stopLivePolling();
+  updateLiveScores();
+  liveTimer = setInterval(() => {
+    if (document.hidden) return;      // sekme arkadaysa istek atma (Vercel'i yorma)
+    const el = $('#view');
+    if (!el || !el.querySelector('.match-live')) { stopLivePolling(); return; }
+    updateLiveScores();
+  }, 10000);
+}
+function stopLivePolling() { if (liveTimer) { clearInterval(liveTimer); liveTimer = null; } }
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && liveTimer) updateLiveScores();
+});
 
 // Ana sayfadaki "Oyun Kuralları" karti (gruplu tam liste).
 function rulesCard() {
@@ -379,8 +415,9 @@ function matchCard(m) {
       ${reportBadge}
       ${fixture}
       <div class="live-row">
-        <span class="live-badge"><span class="live-dot"></span>CANLI</span>
-        <span class="live-note">Maç başladı · bahisler kapandı</span>
+        <span class="live-badge"><span class="live-dot"></span><span data-livelbl="${m.id}">CANLI</span></span>
+        <span class="live-score" data-live="${m.id}"></span>
+        <span class="live-note">bahisler kapandı</span>
       </div>
     </div>`;
   }

@@ -7,7 +7,7 @@ const bcrypt = require('bcryptjs');
 
 const { sql, ensureAdmin, ensureSchema } = require('../src/db');
 const { seedSampleMatches } = require('../src/seed');
-const { refreshMatches, refreshResults, hasApi, fetchStandings, normName } = require('../src/oddsApi');
+const { refreshMatches, refreshResults, hasApi, fetchStandings, normName, fetchLiveScores } = require('../src/oddsApi');
 const { settleMatch, voidMatch, applyHalfTime } = require('../src/settle');
 const { generatePending, apiFootballDiag } = require('../src/aiReport');
 const { computeMarkets } = require('../src/odds-derive');
@@ -174,6 +174,46 @@ app.get('/api/matches', requireAuth, async (req, res) => {
     res.json({ matches: rows.map((m) => { const o = matchOut(m); o.my_bets = cmap[m.id] || 0; o.has_report = !!m.report; return o; }) });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+// Canli skor — PAYLASIMLI onbellek (kisi bazli football-data istegi YOK).
+// 10 sn TTL + kilit => football-data'ya en fazla 10 sn'de 1 istek (=6/dk) gider.
+app.get('/api/live', requireAuth, async (req, res) => {
+  try {
+    // Su an oynaniyor olabilecek (baslamis, henuz sonuclanmamis) mac var mi?
+    const started = await sql`SELECT id, home_team, away_team FROM matches
+      WHERE status='open' AND commence_time <= now() AND commence_time > now() - interval '3.5 hours'`;
+    if (!started.length) return res.json({ live: {} });
+
+    const [st] = await sql`SELECT live_scores, live_scores_at FROM app_state WHERE id=1`;
+    const fresh = st && st.live_scores_at && (Date.now() - new Date(st.live_scores_at).getTime() < 10000);
+    let map = st && st.live_scores ? (typeof st.live_scores === 'string' ? JSON.parse(st.live_scores) : st.live_scores) : {};
+    if (!fresh) {
+      // Kilidi kapabilen tek istek football-data'yi cagirir; digerleri onbellekten okur.
+      const claim = await sql`UPDATE app_state SET live_lock=now()
+        WHERE id=1 AND (live_lock IS NULL OR live_lock < now() - interval '15 seconds')
+          AND (live_scores_at IS NULL OR live_scores_at < now() - interval '10 seconds')
+        RETURNING id`;
+      if (claim.length) {
+        const r = await fetchLiveScores();
+        if (r.has) {
+          map = r.map || {};
+          await sql`UPDATE app_state SET live_scores=${JSON.stringify(map)}::jsonb, live_scores_at=now(), live_lock=NULL WHERE id=1`;
+        } else {
+          await sql`UPDATE app_state SET live_lock=NULL WHERE id=1`;
+        }
+      }
+    }
+    // Bizim mac id'lerine eslestir.
+    const out = {};
+    for (const m of started) {
+      const key = normName(m.home_team) + '|' + normName(m.away_team);
+      if (map[key]) out[m.id] = map[key];
+    }
+    res.json({ live: out });
+  } catch (e) {
+    res.json({ live: {}, error: String(e.message || e) });
   }
 });
 

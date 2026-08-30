@@ -167,6 +167,37 @@ async function fetchStandings() {
   }
 }
 
+// football-data.org: BUGUNUN maclarinin CANLI skor/durumunu normName ile haritalar.
+// (Ucretsiz plan: gecikmeli-canli. Tek istekte tum bugunku maclar gelir.)
+async function fetchLiveScores() {
+  const token = (process.env.FOOTBALL_DATA_TOKEN || '').trim();
+  if (!token) return { has: false, map: {}, error: 'FOOTBALL_DATA_TOKEN yok' };
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    const res = await fetch(`https://api.football-data.org/v4/competitions/PL/matches?dateFrom=${today}&dateTo=${today}`, {
+      headers: { 'X-Auth-Token': token },
+    });
+    if (!res.ok) return { has: false, map: {}, error: `football-data ${res.status}` };
+    const data = await res.json();
+    const map = {};
+    for (const mt of data.matches || []) {
+      const key = normName(mt.homeTeam && mt.homeTeam.name) + '|' + normName(mt.awayTeam && mt.awayTeam.name);
+      const ft = mt.score && mt.score.fullTime, ht = mt.score && mt.score.halfTime;
+      map[key] = {
+        status: mt.status || null,
+        h: ft && ft.home != null ? ft.home : null,
+        a: ft && ft.away != null ? ft.away : null,
+        htH: ht && ht.home != null ? ht.home : null,
+        htA: ht && ht.away != null ? ht.away : null,
+        minute: mt.minute != null ? mt.minute : null,
+      };
+    }
+    return { has: true, map };
+  } catch (e) {
+    return { has: false, map: {}, error: String(e.message || e) };
+  }
+}
+
 // The Odds API: bitmis maclarin mac sonu skorlarini normName ile haritalar.
 async function fetchOddsScores() {
   if (!hasApi()) return { map: {}, has: false, error: 'ODDS_API_KEY yok' };
@@ -256,4 +287,4 @@ async function refreshResults(settleFn, applyHtFn) {
   return { ok: true, settled, iyFixed, conflicts, fdError: fd.error, oaError: oa.error, fdActive: fd.has };
 }
 
-module.exports = { refreshMatches, refreshResults, hasApi, normName, fetchStandings };
+module.exports = { refreshMatches, refreshResults, hasApi, normName, fetchStandings, fetchLiveScores };
