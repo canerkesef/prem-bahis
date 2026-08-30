@@ -11,7 +11,7 @@ async function api(path, opts = {}) {
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'Bir hata olustu');
+  if (!res.ok) { const e = new Error(data.error || 'Bir hata olustu'); e.data = data; e.status = res.status; throw e; }
   return data;
 }
 
@@ -23,6 +23,13 @@ const TZ = 'Europe/Istanbul';
 function fmtDate(iso) {
   const d = new Date(iso);
   return d.toLocaleString('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: TZ });
+}
+// Kuponun oynanma anini SANIYESINE kadar gosterir (cift kupon kontrolu icin).
+function fmtStamp(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  return d.toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: TZ });
 }
 function fmtKick(iso) {
   const d = new Date(iso);
@@ -547,16 +554,32 @@ async function openBet(mid, market, sel) {
     })
   );
   $('#place-bet').addEventListener('click', async () => {
+    const btn = $('#place-bet');
+    if (btn.disabled) return; // cift tiklama koruması (istek devam ederken tekrar gonderme)
     const stake = Number(stakeInput.value);
     if (!stake || stake <= 0) return toast('Geçerli bir tutar girin', true);
     if (stake < CONFIG.min_stake) return toast(`Minimum kupon tutarı ${CONFIG.min_stake} ASCU`, true);
+    btn.disabled = true;
+    const oldLabel = btn.textContent;
+    btn.textContent = 'Oluşturuluyor…';
     try {
       const r = await api('/coupons', { method: 'POST', body: { match_id: mid, market, selection: sel, stake } });
-      updateBalance(r.balance);
+      if (r.balance != null) updateBalance(r.balance);
       closeBet();
       toast('Kupon oluşturuldu! ✅');
     } catch (err) {
-      toast(err.message, true);
+      // Cift gonderim sunucuda engellendiyse kullaniciyi bilgilendir ama korkutma.
+      const d = (err && err.data) || {};
+      if (d.duplicate || /çift gönderim|zaten oluştur/i.test((err && err.message) || '')) {
+        if (d.balance != null) updateBalance(d.balance);
+        closeBet();
+        toast('Bu kupon zaten oluşturulmuştu (çift gönderim engellendi).');
+      } else {
+        toast(err.message, true);
+      }
+    } finally {
+      btn.disabled = false;
+      btn.textContent = oldLabel;
     }
   });
 
@@ -600,6 +623,7 @@ function couponCard(c) {
       <span>Olası: <b>${fmtTL(c.potential_win)}</b></span>
       <span>${fmtDate(c.commence_time)}${score}</span>
     </div>
+    ${c.created_at ? `<div class="coupon-stamp" title="Kuponun oynanma zamanı (saniyeye kadar)">🕒 Oynanma: ${fmtStamp(c.created_at)}</div>` : ''}
   </div>`;
 }
 

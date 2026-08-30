@@ -338,8 +338,19 @@ app.post('/api/coupons', requireAuth, async (req, res) => {
     const potentialWin = Math.round(stake * odd * 100) / 100;
 
     // Bakiye dusme atomik: yeterli bakiye varsa dus, degilse 0 satir etkilenir.
-    let ok = false;
+    // CIFT KUPON KORUMASI: ayni kullanicinin es zamanli istekleri advisory kilitle
+    // sirayla islenir; son ~20 sn icinde AYNI kupon (mac+market+secim+tutar) varsa
+    // yeni kupon acilmaz (kazara cift gonderim engellenir).
+    let ok = false, duplicate = false;
     await sql.begin(async (tx) => {
+      await tx`SELECT pg_advisory_xact_lock(${req.user.id})`;
+      const dup = await tx`
+        SELECT id FROM coupons
+        WHERE user_id=${req.user.id} AND match_id=${match.id}
+          AND market=${market} AND selection=${selection} AND stake=${stake}
+          AND created_at > now() - interval '20 seconds'
+        LIMIT 1`;
+      if (dup.length) { duplicate = true; return; }
       const upd = await tx`
         UPDATE users SET balance = balance - ${stake}
         WHERE id=${req.user.id} AND balance >= ${stake}
@@ -352,6 +363,10 @@ app.post('/api/coupons', requireAuth, async (req, res) => {
         VALUES (${req.user.id}, ${match.id}, ${match.home_team}, ${match.away_team}, ${match.commence_time},
           ${market}, ${selection}, ${odd}, ${stake}, ${potentialWin})`;
     });
+    if (duplicate) {
+      const brows = await sql`SELECT balance FROM users WHERE id=${req.user.id}`;
+      return res.status(409).json({ error: 'Bu kupon az önce zaten oluşturuldu; çift gönderim engellendi.', duplicate: true, balance: Number(brows[0].balance) });
+    }
     if (!ok) return res.status(400).json({ error: 'Yetersiz bakiye.' });
 
     const brows = await sql`SELECT balance FROM users WHERE id=${req.user.id}`;

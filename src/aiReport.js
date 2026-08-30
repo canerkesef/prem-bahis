@@ -189,31 +189,41 @@ async function callGemini(prompt) {
 
 function buildPrompt(match, nums, facts) {
   const dateStr = new Date(match.commence_time).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Istanbul' });
+  const todayStr = new Date().toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Istanbul' });
+  const season = seasonOf(match.commence_time);
+  const seasonStr = `${season}-${String(season + 1).slice(2)}`;
+  const prevStr = `${season - 1}-${String(season).slice(2)}`;
   const h2hStr = facts.h2h.length ? facts.h2h.map((x) => `${x.res} (${x.when})`).join('; ') : 'bilinmiyor';
-  return `Sen bir futbol veri analistisin. ${match.home_team} - ${match.away_team} (Premier Lig, ${dateStr}) için Türkçe "Saha Raporu" hazırla.
+  return `Sen deneyimli bir futbol veri analistisin. ${match.home_team} - ${match.away_team} (Premier Lig, ${dateStr}) için Türkçe "Saha Raporu" hazırla. Bugün: ${todayStr}.
 
-VERİLEN GERÇEKLER (bunları KULLAN, DEĞİŞTİRME):
+SİTENİN KENDİ ORANLARI (bunları AYNEN kullan, DEĞİŞTİRME; analizi ve sonucu bunlara dayandır):
 - Bahis Oranı (1-X-2): ${nums.oddsLine || 'yok'}
 - En olası skorlar: ${nums.scores.join(' · ') || 'yok'}
 - 2.5 ÜST ihtimali: ${nums.ou ? '%' + Math.round(nums.ou.over) : 'yok'}
 - KG VAR ihtimali: ${nums.kg ? '%' + Math.round(nums.kg.yes) : 'yok'}
-- Hakem: ${facts.referee || 'bilinmiyor'}
-- Stadyum: ${facts.stadium || 'bilinmiyor'}
-- Eksik oyuncular (ev — deplasman): ${facts.injuries || 'bilinmiyor'}
-- Son karşılaşmalar: ${h2hStr}
+Hazir gerçekler (varsa kullan): Hakem: ${facts.referee || 'yok'} | Stadyum: ${facts.stadium || 'yok'} | Eksikler (ev — dep): ${facts.injuries || 'yok'} | Son maçlar: ${h2hStr}
 
-GOOGLE ARAMASI ile şunları güncel doğrula/bul: iki takımın bu sezon (2026-27) maç başına xG ve xGA'sı; eksik oyuncular eksikse tamamla; güncel form ve lig sırası. Bulamadığını "veri yok" yaz, ASLA uydurma.
+GÖREV — GOOGLE ARAMASI YAP ve şu verileri GERÇEK kaynaklardan (fbref.com, understat, whoscored, transfermarkt, premierleague.com, sofascore) bul. Her satırı ELİNDEN GELDİĞİNCE DOLDUR:
+1) xG (maç başı): önce ${seasonStr} sezonu; sezon başıysa/az maç oynanmışsa ${prevStr} sezon ortalamasını kullan ve parantezle belirt. Örn: "1.75 — 1.60 (${prevStr})".
+2) xGA (maç başı): aynı kural.
+3) Eksik/sakat/cezalı oyuncular: iki takım için güncel listeyi ara ve isim ver.
+4) Son 5 karşılaşma (H2H): yoksa aramayla bul, skorlarıyla özetle.
+5) Hakem: bu maça atanan hakem açıklandıysa yaz.
+6) PPDA veya pres yoğunluğu (baskı): ${seasonStr} yoksa ${prevStr} değerini kullan, kaynağı ima et.
+7) Güncel form ve lig sırası bilgisini "intro" ve "why" içinde kullan.
 
-SADECE şu JSON'u döndür (başka metin yok):
+KURALLAR: Sadece gerçekten aradıktan sonra hiçbir şey bulamazsan o değeri "veri yok" yaz. Tahmini bir aralık, geçen sezon ortalaması gibi GERÇEK bir veri her zaman "veri yok"dan iyidir. Ama ASLA uydurma/rastgele sayı verme; verdiğin sayı aranan gerçek bir kaynaktan olmalı.
+
+SADECE şu JSON'u döndür (başka metin, markdown, açıklama YOK):
 {"meta":{"league":"Premier Lig","week":null,"date":"${dateStr}","stadium":${JSON.stringify(facts.stadium)}},
-"intro":"2-3 cümle",
-"data":[["Bahis Oranı (1-X-2)","${nums.oddsLine || 'veri yok'}"],["xG (Sezon, Maç Başı)","<ev> — <dep> | veri yok"],["xGA (Sezon, Maç Başı)","<ev> — <dep> | veri yok"],["En Olası Skorlar","${nums.scores.join(' · ') || 'veri yok'}"],["Eksik Oyuncu",${JSON.stringify(facts.injuries || 'veri yok')}],["Son 5 H2H","<özet> | veri yok"]],
+"intro":"2-3 cümle, güncel form/sıralamaya değin",
+"data":[["Bahis Oranı (1-X-2)","${nums.oddsLine || 'veri yok'}"],["xG (Maç Başı)","<ev> — <dep> (dönem)"],["xGA (Maç Başı)","<ev> — <dep> (dönem)"],["En Olası Skorlar","${nums.scores.join(' · ') || 'veri yok'}"],["Eksik Oyuncu",${JSON.stringify(facts.injuries || '<ev eksikleri> — <dep eksikleri>')}],["Son 5 H2H","<kısa özet>"]],
 "gauges":[],
-"conclusion":{"title":"kısa sonuç","note":"1 cümle"},
+"conclusion":{"title":"kısa sonuç (ör. Ev Sahibi Favori)","note":"1 cümle, oranlara dayalı"},
 "h2h":${JSON.stringify(facts.h2h)},
 "h2h_note":"1 cümle | null",
-"extras":[["Hakem",${JSON.stringify(facts.referee || 'veri yok')}],["Baskı (PPDA)","veri yok"]],
-"why":"2-3 cümle",
+"extras":[["Hakem",${JSON.stringify(facts.referee || '<hakem>')}],["Baskı (PPDA)","<ev> — <dep> (dönem)"]],
+"why":"2-3 cümle, oranlar + xG + form birlikte",
 "footer":"Bu rapor istatistiksel analiz içerir; kesin sonuç garantisi vermez."}`;
 }
 
