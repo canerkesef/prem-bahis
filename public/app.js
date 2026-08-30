@@ -467,18 +467,20 @@ function srGauge(g) {
 function srFormChips(arr) {
   if (!arr || !arr.length) return '<span class="form-na">veri yok</span>';
   return arr.map((x) => {
-    const cls = x === 'G' ? 'g' : x === 'B' ? 'b' : 'm';
-    return `<span class="form-dot ${cls}">${x}</span>`;
+    const r = typeof x === 'string' ? x : (x && x.r) || '';
+    const comp = typeof x === 'object' && x && x.comp ? x.comp : '';
+    const cls = r === 'G' ? 'g' : r === 'B' ? 'b' : 'm';
+    return `<span class="form-chip"><span class="form-dot ${cls}">${r}</span>${comp ? `<span class="form-comp">${comp}</span>` : ''}</span>`;
   }).join('');
 }
 function srForm(f) {
   if (!f || (!(f.home && f.home.length) && !(f.away && f.away.length))) return '';
-  return `<div class="sr-sec">SON 5 LİG MAÇI</div>
+  return `<div class="sr-sec">SON 5 MAÇ</div>
     <div class="sr-form">
       <div class="sr-form-row"><span class="sr-fteam">${f.homeTeam || ''}</span><span class="sr-fdots">${srFormChips(f.home)}</span></div>
       <div class="sr-form-row"><span class="sr-fteam">${f.awayTeam || ''}</span><span class="sr-fdots">${srFormChips(f.away)}</span></div>
     </div>
-    <div class="sr-formlegend"><span><i class="form-dot g">G</i>Galibiyet</span><span><i class="form-dot b">B</i>Beraberlik</span><span><i class="form-dot m">M</i>Mağlubiyet</span><span class="sr-formhint">en solda en eski</span></div>`;
+    <div class="sr-formlegend"><span><i class="form-dot g">G</i>Galibiyet</span><span><i class="form-dot b">B</i>Beraberlik</span><span><i class="form-dot m">M</i>Mağlubiyet</span><span class="sr-formhint">tüm turnuvalar · en solda en yeni</span></div>`;
 }
 function sahaReportHtml(r, m) {
   if (!r) return '';

@@ -124,8 +124,34 @@ async function fdGet(path) {
   if (!res.ok) throw new Error(`football-data ${res.status}`);
   return res.json();
 }
+// football-data turnuva kodunu kisa etikete cevirir.
+function compShort(c) {
+  const map = { PL: 'Lig', ELC: 'Ch', CL: 'ŞL', EL: 'AL', ECL: 'Konf', FA: 'FA', FAC: 'FA', EFL: 'LC', WC: 'DK', EC: 'EURO', CLI: 'ŞL' };
+  return map[c] || String(c || '').slice(0, 3);
+}
+// Bir takimin SON 5 MACI (tum turnuvalar; ucretsiz planda kapsanan yaris/kupalar dahil).
+async function fdTeamForm(teamId) {
+  if (!teamId) return null;
+  try {
+    const j = await fdGet(`/teams/${teamId}/matches?status=FINISHED&limit=12`);
+    const ms = (j && j.matches) || [];
+    const last = ms
+      .filter((x) => x.score && x.score.winner)
+      .sort((a, b) => new Date(b.utcDate) - new Date(a.utcDate))
+      .slice(0, 5); // yeni -> eski (en yeni solda)
+    if (!last.length) return null;
+    return last.map((x) => {
+      const isHome = x.homeTeam && x.homeTeam.id === teamId;
+      let r = 'M';
+      if (x.score.winner === 'DRAW') r = 'B';
+      else if ((x.score.winner === 'HOME_TEAM' && isHome) || (x.score.winner === 'AWAY_TEAM' && !isHome)) r = 'G';
+      const comp = compShort(x.competition && (x.competition.code || x.competition.name));
+      return { r, comp };
+    });
+  } catch (_) { return null; }
+}
 async function fdFacts(match) {
-  const out = { referee: null, stadium: null, h2h: [] };
+  const out = { referee: null, stadium: null, h2h: [], formHome: null, formAway: null };
   if (!(process.env.FOOTBALL_DATA_TOKEN || '').trim()) return out;
   const hn = normName(match.home_team), an = normName(match.away_team);
   const day = new Date(match.commence_time);
@@ -141,6 +167,7 @@ async function fdFacts(match) {
   const ref = refs.find((r) => /^REFEREE$/i.test(r.type || '')) || refs.find((r) => /referee/i.test(r.type || '') && !/assistant|video|fourth/i.test(r.type || '')) || refs[0];
   out.referee = ref ? ref.name : null;
   out.stadium = mt.venue || null;
+  const hid = mt.homeTeam && mt.homeTeam.id, aid = mt.awayTeam && mt.awayTeam.id;
   try {
     const h = await fdGet(`/matches/${mt.id}/head2head?limit=10`);
     const hm = (h && h.matches) || [];
@@ -150,6 +177,9 @@ async function fdFacts(match) {
       .slice(0, 5)
       .map((x) => ({ res: `${x.homeTeam.name} ${x.score.fullTime.home}-${x.score.fullTime.away} ${x.awayTeam.name}`.replace(/ FC/g, ''), when: (x.utcDate || '').slice(0, 7) }));
   } catch (_) {}
+  // Son 5 mac (tum turnuvalar)
+  out.formHome = await fdTeamForm(hid);
+  out.formAway = await fdTeamForm(aid);
   return out;
 }
 
@@ -196,12 +226,12 @@ async function understatXG(match) {
   if (!h && !a) return null;
   const f = (x) => (x && x.xgPer != null ? x.xgPer.toFixed(2) : 'veri yok');
   const fa = (x) => (x && x.xgaPer != null ? x.xgaPer.toFixed(2) : 'veri yok');
-  // Son 5 lig maci formu (G/B/M), en eski -> en yeni.
+  // Son maclar (Understat yalnizca LIG maclarini tutar), en eski -> en yeni.
   const formOf = (x) => {
     if (!x || !x.hist) return null;
-    const last = x.hist.filter((h) => h.result).sort((p, q) => new Date(p.date) - new Date(q.date)).slice(-5);
+    const last = x.hist.filter((h) => h.result).sort((p, q) => new Date(q.date) - new Date(p.date)).slice(0, 5); // yeni -> eski
     if (!last.length) return null;
-    return last.map((h) => (h.result === 'w' ? 'G' : h.result === 'd' ? 'B' : 'M'));
+    return last.map((h) => ({ r: h.result === 'w' ? 'G' : h.result === 'd' ? 'B' : 'M', comp: 'Lig' }));
   };
   return {
     xg: `${f(h)} — ${f(a)} (${period})`,
@@ -222,15 +252,26 @@ async function gatherFacts(match) {
     withTimeout(fetchFacts(match), 12000).catch(() => null),   // API-Football (yedek H2H/sakat)
     withTimeout(understatXG(match), 12000).catch(() => null),  // Understat (xG)
   ]);
-  // Oncelik: football-data (guncel) > API-Football (gecmis)
-  if (fd) { facts.referee = fd.referee || facts.referee; facts.stadium = fd.stadium || facts.stadium; if (fd.h2h && fd.h2h.length) facts.h2h = fd.h2h; }
+  // Oncelik: football-data (guncel, tum turnuvalar) > API-Football (gecmis)
+  if (fd) {
+    facts.referee = fd.referee || facts.referee;
+    facts.stadium = fd.stadium || facts.stadium;
+    if (fd.h2h && fd.h2h.length) facts.h2h = fd.h2h;
+    if (fd.formHome && fd.formHome.length) facts.formHome = fd.formHome;
+    if (fd.formAway && fd.formAway.length) facts.formAway = fd.formAway;
+  }
   if (af) {
     facts.referee = facts.referee || af.referee;
     facts.stadium = facts.stadium || af.stadium;
     facts.injuries = facts.injuries || af.injuries;
     if (!facts.h2h.length && af.h2h && af.h2h.length) facts.h2h = af.h2h;
   }
-  if (us) { facts.xg = us.xg; facts.xga = us.xga; facts.formHome = us.formHome; facts.formAway = us.formAway; }
+  if (us) {
+    facts.xg = us.xg; facts.xga = us.xga;
+    // Understat yalnizca lig; football-data'dan form gelmediyse yedek olarak kullan.
+    if (!facts.formHome && us.formHome) facts.formHome = us.formHome;
+    if (!facts.formAway && us.formAway) facts.formAway = us.formAway;
+  }
   return facts;
 }
 
@@ -273,7 +314,7 @@ async function apiFootballDiag(match) {
     }
     // Diger kaynaklar (cok kaynakli):
     out.footballDataToken = !!(process.env.FOOTBALL_DATA_TOKEN || '').trim();
-    try { const fd = await fdFacts(match); out.footballData = { referee: fd.referee, stadium: fd.stadium, h2hCount: fd.h2h.length }; }
+    try { const fd = await fdFacts(match); out.footballData = { referee: fd.referee, stadium: fd.stadium, h2hCount: fd.h2h.length, formHome: fd.formHome, formAway: fd.formAway }; }
     catch (e) { out.footballData = { error: String(e.message || e) }; }
     try { const us = await understatXG(match); out.understat = us || 'bulunamadi'; }
     catch (e) { out.understat = { error: String(e.message || e) }; }
@@ -403,7 +444,7 @@ HAZIR GERÇEKLER (kaynaklardan çekildi — DEĞİŞTİRME, olduğu gibi kullan)
 - Son maçlar (H2H): ${h2hStr}
 - xG maç başı (Understat): ${facts.xg || 'yok'}
 - xGA maç başı (Understat): ${facts.xga || 'yok'}
-- Son 5 lig formu (G/B/M, eski→yeni) ev: ${(facts.formHome && facts.formHome.join(' ')) || 'yok'} | dep: ${(facts.formAway && facts.formAway.join(' ')) || 'yok'}
+- Son 5 maç formu (G/B/M, yeni→eski) ev: ${(facts.formHome && facts.formHome.map((x) => x.r).join(' ')) || 'yok'} | dep: ${(facts.formAway && facts.formAway.map((x) => x.r).join(' ')) || 'yok'}
 
 ÖNEMLİ: Yukarıdaki "HAZIR GERÇEKLER"de dolu olan alanları (hakem, xG, xGA, H2H, eksik) AYNEN kullan, tekrar arama. SADECE "yok" olan alanları GOOGLE ARAMASI ile GERÇEK kaynaklardan tamamla. ÖNCELİKLE sofascore.com'a bak (bu maçın ve iki takımın SofaScore sayfaları; sakat/eksik oyuncu, hakem, pres/PPDA için en iyi kaynak). SofaScore'da bulamazsan sırayla fbref.com, understat, whoscored, transfermarkt, premierleague.com kaynaklarına bak. Aramaları "SofaScore ${match.home_team} ${match.away_team}", "SofaScore ${match.home_team} sakatlıklar", "${match.home_team} ${match.away_team} hakem" gibi yap. Her satırı ELİNDEN GELDİĞİNCE DOLDUR:
 1) xG (maç başı): önce ${seasonStr} sezonu; sezon başıysa/az maç oynanmışsa ${prevStr} sezon ortalamasını kullan ve parantezle belirt. Örn: "1.75 — 1.60 (${prevStr})".
