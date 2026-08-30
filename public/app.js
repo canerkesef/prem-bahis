@@ -946,7 +946,7 @@ async function renderAdmin(el) {
     <div class="card">
       <h3>🤖 Saha Raporu (AI)</h3>
       <p style="color:var(--muted);font-size:13px;line-height:1.5;margin-bottom:10px">
-        Yaklaşan maçlar için raporu <b>otomatik</b> üretir (oranlar siteden, xG/eksik/H2H web'den). Her gün gece 00:00'da kendi de çalışır.
+        Yaklaşan maçlar için raporu <b>otomatik</b> üretir. Oranlar siteden; hakem/H2H football-data'dan; xG Understat'tan; sakat/PPDA SofaScore/Gemini aramasından. Her gün gece 00:00'da kendi de çalışır.
       </p>
       <div class="admin-tools" style="margin-bottom:6px">
         <button class="btn-sm btn-blue" id="ai-gen">🤖 Eksik Raporları Üret</button>

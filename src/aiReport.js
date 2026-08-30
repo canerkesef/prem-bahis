@@ -115,6 +115,113 @@ async function fetchFacts(match) {
   return facts;
 }
 
+// ---------- football-data.org (UCRETSIZ, GUNCEL SEZON: hakem + H2H + stadyum) ----------
+const FD_BASE = 'https://api.football-data.org/v4';
+async function fdGet(path) {
+  const token = (process.env.FOOTBALL_DATA_TOKEN || '').trim();
+  if (!token) return null;
+  const res = await fetch(`${FD_BASE}${path}`, { headers: { 'X-Auth-Token': token } });
+  if (!res.ok) throw new Error(`football-data ${res.status}`);
+  return res.json();
+}
+async function fdFacts(match) {
+  const out = { referee: null, stadium: null, h2h: [] };
+  if (!(process.env.FOOTBALL_DATA_TOKEN || '').trim()) return out;
+  const hn = normName(match.home_team), an = normName(match.away_team);
+  const day = new Date(match.commence_time);
+  const from = new Date(day.getTime() - 2 * 86400000).toISOString().slice(0, 10);
+  const to = new Date(day.getTime() + 2 * 86400000).toISOString().slice(0, 10);
+  let list;
+  try { list = await fdGet(`/competitions/PL/matches?dateFrom=${from}&dateTo=${to}`); } catch (_) { return out; }
+  const matches = (list && list.matches) || [];
+  const mt = matches.find((m) => normName(m.homeTeam && m.homeTeam.name) === hn && normName(m.awayTeam && m.awayTeam.name) === an)
+    || matches.find((m) => normName((m.homeTeam && m.homeTeam.name) || '').includes(hn.slice(0, 5)) && normName((m.awayTeam && m.awayTeam.name) || '').includes(an.slice(0, 5)));
+  if (!mt) return out;
+  const refs = mt.referees || [];
+  const ref = refs.find((r) => /^REFEREE$/i.test(r.type || '')) || refs.find((r) => /referee/i.test(r.type || '') && !/assistant|video|fourth/i.test(r.type || '')) || refs[0];
+  out.referee = ref ? ref.name : null;
+  out.stadium = mt.venue || null;
+  try {
+    const h = await fdGet(`/matches/${mt.id}/head2head?limit=10`);
+    const hm = (h && h.matches) || [];
+    out.h2h = hm
+      .filter((x) => x.score && x.score.fullTime && x.score.fullTime.home != null)
+      .sort((a, b) => new Date(b.utcDate) - new Date(a.utcDate))
+      .slice(0, 5)
+      .map((x) => ({ res: `${x.homeTeam.name} ${x.score.fullTime.home}-${x.score.fullTime.away} ${x.awayTeam.name}`.replace(/ FC/g, ''), when: (x.utcDate || '').slice(0, 7) }));
+  } catch (_) {}
+  return out;
+}
+
+// ---------- Understat (UCRETSIZ xG/xGA; sayfadaki JSON'dan cekilir) ----------
+async function understatLeague(season) {
+  const res = await fetch(`https://understat.com/league/EPL/${season}`, { headers: { 'user-agent': 'Mozilla/5.0', 'accept-language': 'en' } });
+  if (!res.ok) throw new Error(`understat ${res.status}`);
+  const html = await res.text();
+  const m = html.match(/teamsData\s*=\s*JSON\.parse\('([^']+)'\)/);
+  if (!m) return null;
+  const decoded = m[1]
+    .replace(/\\x([0-9A-Fa-f]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
+    .replace(/\\u([0-9A-Fa-f]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+  let data; try { data = JSON.parse(decoded); } catch (_) { return null; }
+  const byName = {};
+  for (const k in data) {
+    const t = data[k]; const hist = t.history || []; const gp = hist.length;
+    const xg = hist.reduce((s, h) => s + Number(h.xG || 0), 0);
+    const xga = hist.reduce((s, h) => s + Number(h.xGA || 0), 0);
+    byName[normName(t.title)] = { gp, xgPer: gp ? xg / gp : null, xgaPer: gp ? xga / gp : null };
+  }
+  return byName;
+}
+async function understatXG(match) {
+  const hn = normName(match.home_team), an = normName(match.away_team);
+  const cur = seasonOf(match.commence_time);
+  const find = (tbl, n) => {
+    if (!tbl) return null;
+    if (tbl[n]) return tbl[n];
+    const e = Object.entries(tbl).find(([k]) => k.includes(n.slice(0, 5)) || n.includes(k.slice(0, 5)));
+    return e ? e[1] : null;
+  };
+  let curTbl = null; try { curTbl = await understatLeague(cur); } catch (_) {}
+  let h = find(curTbl, hn), a = find(curTbl, an);
+  let period = `${cur}-${String(cur + 1).slice(2)}`;
+  const thin = (x) => !x || !x.gp || x.gp < 3;
+  if (thin(h) || thin(a)) {
+    let prevTbl = null; try { prevTbl = await understatLeague(cur - 1); } catch (_) {}
+    const ph = find(prevTbl, hn), pa = find(prevTbl, an);
+    if (thin(h) && ph) h = ph;
+    if (thin(a) && pa) a = pa;
+    if (ph || pa) period = `${cur - 1}-${String(cur).slice(2)} baz`;
+  }
+  if (!h && !a) return null;
+  const f = (x) => (x && x.xgPer != null ? x.xgPer.toFixed(2) : 'veri yok');
+  const fa = (x) => (x && x.xgaPer != null ? x.xgaPer.toFixed(2) : 'veri yok');
+  return { xg: `${f(h)} — ${f(a)} (${period})`, xga: `${fa(h)} — ${fa(a)} (${period})` };
+}
+
+// ---------- COK KAYNAKLI birlestirici (tek siteye bagimli degil) ----------
+function withTimeout(p, ms) {
+  return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
+}
+async function gatherFacts(match) {
+  const facts = { referee: null, stadium: null, injuries: null, h2h: [], h2h_note: null, xg: null, xga: null };
+  const [fd, af, us] = await Promise.all([
+    withTimeout(fdFacts(match), 12000).catch(() => null),      // football-data (guncel sezon)
+    withTimeout(fetchFacts(match), 12000).catch(() => null),   // API-Football (yedek H2H/sakat)
+    withTimeout(understatXG(match), 12000).catch(() => null),  // Understat (xG)
+  ]);
+  // Oncelik: football-data (guncel) > API-Football (gecmis)
+  if (fd) { facts.referee = fd.referee || facts.referee; facts.stadium = fd.stadium || facts.stadium; if (fd.h2h && fd.h2h.length) facts.h2h = fd.h2h; }
+  if (af) {
+    facts.referee = facts.referee || af.referee;
+    facts.stadium = facts.stadium || af.stadium;
+    facts.injuries = facts.injuries || af.injuries;
+    if (!facts.h2h.length && af.h2h && af.h2h.length) facts.h2h = af.h2h;
+  }
+  if (us) { facts.xg = us.xg; facts.xga = us.xga; }
+  return facts;
+}
+
 // ---------- Tani (admin debug): API-Football gercekte ne donuyor? ----------
 async function apiFootballDiag(match) {
   const key = (process.env.APIFOOTBALL_KEY || '').trim();
@@ -152,6 +259,12 @@ async function apiFootballDiag(match) {
       const h = await call(`/fixtures/headtohead?h2h=${hid}-${aid}`);
       out.h2hStatus = h.status; out.h2hCount = h.results; out.h2hErrors = h.errors;
     }
+    // Diger kaynaklar (cok kaynakli):
+    out.footballDataToken = !!(process.env.FOOTBALL_DATA_TOKEN || '').trim();
+    try { const fd = await fdFacts(match); out.footballData = { referee: fd.referee, stadium: fd.stadium, h2hCount: fd.h2h.length }; }
+    catch (e) { out.footballData = { error: String(e.message || e) }; }
+    try { const us = await understatXG(match); out.understat = us || 'bulunamadi'; }
+    catch (e) { out.understat = { error: String(e.message || e) }; }
   }
   return out;
 }
@@ -271,9 +384,15 @@ SİTENİN KENDİ ORANLARI (bunları AYNEN kullan, DEĞİŞTİRME; analizi ve son
 - En olası skorlar: ${nums.scores.join(' · ') || 'yok'}
 - 2.5 ÜST ihtimali: ${nums.ou ? '%' + Math.round(nums.ou.over) : 'yok'}
 - KG VAR ihtimali: ${nums.kg ? '%' + Math.round(nums.kg.yes) : 'yok'}
-Hazir gerçekler (varsa kullan): Hakem: ${facts.referee || 'yok'} | Stadyum: ${facts.stadium || 'yok'} | Eksikler (ev — dep): ${facts.injuries || 'yok'} | Son maçlar: ${h2hStr}
+HAZIR GERÇEKLER (kaynaklardan çekildi — DEĞİŞTİRME, olduğu gibi kullan):
+- Hakem: ${facts.referee || 'yok'}
+- Stadyum: ${facts.stadium || 'yok'}
+- Eksikler (ev — dep): ${facts.injuries || 'yok'}
+- Son maçlar (H2H): ${h2hStr}
+- xG maç başı (Understat): ${facts.xg || 'yok'}
+- xGA maç başı (Understat): ${facts.xga || 'yok'}
 
-GÖREV — GOOGLE ARAMASI YAP ve şu verileri GERÇEK kaynaklardan bul. ÖNCELİKLE sofascore.com'a bak (bu maçın ve iki takımın SofaScore sayfaları; istatistik, sakat/eksik oyuncu, hakem ve H2H için en iyi kaynak). SofaScore'da bulamazsan sırayla fbref.com, understat, whoscored, transfermarkt, premierleague.com kaynaklarına bak. İlgili aramaları "SofaScore ${match.home_team} ${match.away_team}", "SofaScore ${match.home_team} istatistik", "SofaScore ${match.away_team} sakatlıklar/hakem" gibi yap. Her satırı ELİNDEN GELDİĞİNCE DOLDUR:
+ÖNEMLİ: Yukarıdaki "HAZIR GERÇEKLER"de dolu olan alanları (hakem, xG, xGA, H2H, eksik) AYNEN kullan, tekrar arama. SADECE "yok" olan alanları GOOGLE ARAMASI ile GERÇEK kaynaklardan tamamla. ÖNCELİKLE sofascore.com'a bak (bu maçın ve iki takımın SofaScore sayfaları; sakat/eksik oyuncu, hakem, pres/PPDA için en iyi kaynak). SofaScore'da bulamazsan sırayla fbref.com, understat, whoscored, transfermarkt, premierleague.com kaynaklarına bak. Aramaları "SofaScore ${match.home_team} ${match.away_team}", "SofaScore ${match.home_team} sakatlıklar", "${match.home_team} ${match.away_team} hakem" gibi yap. Her satırı ELİNDEN GELDİĞİNCE DOLDUR:
 1) xG (maç başı): önce ${seasonStr} sezonu; sezon başıysa/az maç oynanmışsa ${prevStr} sezon ortalamasını kullan ve parantezle belirt. Örn: "1.75 — 1.60 (${prevStr})".
 2) xGA (maç başı): aynı kural.
 3) Eksik/sakat/cezalı oyuncular: iki takım için güncel listeyi ara ve isim ver.
@@ -287,7 +406,7 @@ KURALLAR: Sadece gerçekten aradıktan sonra hiçbir şey bulamazsan o değeri "
 SADECE şu JSON'u döndür (başka metin, markdown, açıklama YOK):
 {"meta":{"league":"Premier Lig","week":null,"date":"${dateStr}","stadium":${JSON.stringify(facts.stadium)}},
 "intro":"2-3 cümle, güncel form/sıralamaya değin",
-"data":[["Bahis Oranı (1-X-2)","${nums.oddsLine || 'veri yok'}"],["xG (Maç Başı)","<ev> — <dep> (dönem)"],["xGA (Maç Başı)","<ev> — <dep> (dönem)"],["En Olası Skorlar","${nums.scores.join(' · ') || 'veri yok'}"],["Eksik Oyuncu",${JSON.stringify(facts.injuries || '<ev eksikleri> — <dep eksikleri>')}],["Son 5 H2H","<kısa özet>"]],
+"data":[["Bahis Oranı (1-X-2)","${nums.oddsLine || 'veri yok'}"],["xG (Maç Başı)",${JSON.stringify(facts.xg || '<ev> — <dep> (dönem)')}],["xGA (Maç Başı)",${JSON.stringify(facts.xga || '<ev> — <dep> (dönem)')}],["En Olası Skorlar","${nums.scores.join(' · ') || 'veri yok'}"],["Eksik Oyuncu",${JSON.stringify(facts.injuries || '<ev eksikleri> — <dep eksikleri>')}],["Son 5 H2H","<kısa özet>"]],
 "gauges":[],
 "conclusion":{"title":"kısa sonuç (ör. Ev Sahibi Favori)","note":"1 cümle, oranlara dayalı"},
 "h2h":${JSON.stringify(facts.h2h)},
@@ -313,7 +432,7 @@ function stripEmpty(rows) {
 
 async function generateReportFor(match) {
   const nums = deriveNumbers(match.markets);
-  const facts = await fetchFacts(match);
+  const facts = await gatherFacts(match);
   const report = await callGemini(buildPrompt(match, nums, facts));
   // Kesin sayisal alanlari garanti et.
   const g = [];
