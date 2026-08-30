@@ -51,21 +51,43 @@ async function afGet(path) {
   const j = await res.json();
   return j.response || [];
 }
+// Takim ID'sini isimle bul (sezondan bagimsiz; ucretsiz planda guncel sezon
+// kapali olsa bile calisir). H2H gecmisi bu ID'lerle cekilebilir.
+async function afTeamId(name) {
+  try {
+    const q = encodeURIComponent(String(name).replace(/ FC$/i, '').trim());
+    const r = await afGet(`/teams?search=${q}`) || [];
+    if (!r.length) return null;
+    const nn = normName(name);
+    const hit = r.find((t) => normName(t.team.name) === nn)
+      || r.find((t) => normName(t.team.name).includes(nn.slice(0, 5))) || r[0];
+    return hit && hit.team ? hit.team.id : null;
+  } catch (_) { return null; }
+}
 async function fetchFacts(match) {
   const facts = { referee: null, stadium: null, injuries: null, h2h: [], h2h_note: null };
   if (!(process.env.APIFOOTBALL_KEY || '').trim()) return facts;
+  const hn = normName(match.home_team), an = normName(match.away_team);
+  let hid = null, aid = null, fx = null;
+  // 1) Guncel maci tarih+sezon ile bulmaya calis (hakem/stadyum/sakat icin fixture gerek).
   try {
     const date = new Date(match.commence_time).toISOString().slice(0, 10);
     const season = seasonOf(match.commence_time);
     const fixtures = await afGet(`/fixtures?date=${date}&league=${AF_LEAGUE}&season=${season}`) || [];
-    const hn = normName(match.home_team), an = normName(match.away_team);
-    const fx = fixtures.find((f) => normName(f.teams.home.name) === hn && normName(f.teams.away.name) === an)
-      || fixtures.find((f) => normName(f.teams.home.name).includes(hn.slice(0, 5)) && normName(f.teams.away.name).includes(an.slice(0, 5)));
-    if (!fx) return facts;
-    facts.referee = fx.fixture.referee || null;
-    facts.stadium = (fx.fixture.venue && fx.fixture.venue.name) || null;
-    const hid = fx.teams.home.id, aid = fx.teams.away.id;
-    // Sakatlar
+    fx = fixtures.find((f) => normName(f.teams.home.name) === hn && normName(f.teams.away.name) === an)
+      || fixtures.find((f) => normName(f.teams.home.name).includes(hn.slice(0, 5)) && normName(f.teams.away.name).includes(an.slice(0, 5))) || null;
+    if (fx) {
+      facts.referee = fx.fixture.referee || null;
+      facts.stadium = (fx.fixture.venue && fx.fixture.venue.name) || null;
+      hid = fx.teams.home.id; aid = fx.teams.away.id;
+    }
+  } catch (_) {}
+  // 2) Fixture bulunamadiysa (ucretsiz plan guncel sezonu kapatiyor olabilir) takim
+  //    ID'lerini isimle coz — H2H gecmisi yine de cekilebilir.
+  if (!hid) hid = await afTeamId(match.home_team);
+  if (!aid) aid = await afTeamId(match.away_team);
+  // 3) Sakatlar (fixture varsa)
+  if (fx) {
     try {
       const inj = await afGet(`/injuries?fixture=${fx.fixture.id}`) || [];
       if (inj.length) {
@@ -74,7 +96,9 @@ async function fetchFacts(match) {
         facts.injuries = `${home.join(', ') || 'yok'} — ${away.join(', ') || 'yok'}`;
       }
     } catch (_) {}
-    // H2H son 5
+  }
+  // 4) H2H son 5 (ID varsa; sezondan bagimsiz gecmis).
+  if (hid && aid) {
     try {
       const h2h = await afGet(`/fixtures/headtohead?h2h=${hid}-${aid}&last=5`) || [];
       facts.h2h = h2h.map((f) => ({
@@ -82,8 +106,49 @@ async function fetchFacts(match) {
         when: (f.fixture.date || '').slice(0, 7),
       }));
     } catch (_) {}
-  } catch (_) {}
+  }
   return facts;
+}
+
+// ---------- Tani (admin debug): API-Football gercekte ne donuyor? ----------
+async function apiFootballDiag(match) {
+  const key = (process.env.APIFOOTBALL_KEY || '').trim();
+  const out = { keyPresent: !!key, keyLen: key.length };
+  if (!key) { out.error = 'APIFOOTBALL_KEY tanimli degil.'; return out; }
+  const call = async (path) => {
+    try {
+      const res = await fetch(`${AF_BASE}${path}`, { headers: { 'x-apisports-key': key } });
+      const j = await res.json().catch(() => ({}));
+      return { status: res.status, results: j.results, errors: j.errors, response: j.response };
+    } catch (e) { return { error: String(e.message || e) }; }
+  };
+  // Hesap/plan durumu
+  const st = await call('/status');
+  out.status = st.status;
+  out.account = st.response && st.response.subscription ? {
+    plan: st.response.subscription.plan,
+    active: st.response.subscription.active,
+    requests: st.response.requests,
+  } : (st.errors || st.response || null);
+  if (match) {
+    const date = new Date(match.commence_time).toISOString().slice(0, 10);
+    const season = seasonOf(match.commence_time);
+    out.match = `${match.home_team} - ${match.away_team}`;
+    out.date = date; out.season = season;
+    const fx = await call(`/fixtures?date=${date}&league=${AF_LEAGUE}&season=${season}`);
+    out.fixturesStatus = fx.status;
+    out.fixturesCount = fx.results;
+    out.fixturesErrors = fx.errors;
+    out.sampleFixtures = Array.isArray(fx.response) ? fx.response.slice(0, 4).map((f) => `${f.teams.home.name}-${f.teams.away.name}`) : null;
+    const hid = await afTeamId(match.home_team);
+    const aid = await afTeamId(match.away_team);
+    out.teamIds = { home: hid, away: aid };
+    if (hid && aid) {
+      const h = await call(`/fixtures/headtohead?h2h=${hid}-${aid}&last=5`);
+      out.h2hStatus = h.status; out.h2hCount = h.results; out.h2hErrors = h.errors;
+    }
+  }
+  return out;
 }
 
 // ---------- Gemini (ucretsiz AI) ----------
@@ -203,7 +268,7 @@ SİTENİN KENDİ ORANLARI (bunları AYNEN kullan, DEĞİŞTİRME; analizi ve son
 - KG VAR ihtimali: ${nums.kg ? '%' + Math.round(nums.kg.yes) : 'yok'}
 Hazir gerçekler (varsa kullan): Hakem: ${facts.referee || 'yok'} | Stadyum: ${facts.stadium || 'yok'} | Eksikler (ev — dep): ${facts.injuries || 'yok'} | Son maçlar: ${h2hStr}
 
-GÖREV — GOOGLE ARAMASI YAP ve şu verileri GERÇEK kaynaklardan (fbref.com, understat, whoscored, transfermarkt, premierleague.com, sofascore) bul. Her satırı ELİNDEN GELDİĞİNCE DOLDUR:
+GÖREV — GOOGLE ARAMASI YAP ve şu verileri GERÇEK kaynaklardan bul. ÖNCELİKLE sofascore.com'a bak (bu maçın ve iki takımın SofaScore sayfaları; istatistik, sakat/eksik oyuncu, hakem ve H2H için en iyi kaynak). SofaScore'da bulamazsan sırayla fbref.com, understat, whoscored, transfermarkt, premierleague.com kaynaklarına bak. İlgili aramaları "SofaScore ${match.home_team} ${match.away_team}", "SofaScore ${match.home_team} istatistik", "SofaScore ${match.away_team} sakatlıklar/hakem" gibi yap. Her satırı ELİNDEN GELDİĞİNCE DOLDUR:
 1) xG (maç başı): önce ${seasonStr} sezonu; sezon başıysa/az maç oynanmışsa ${prevStr} sezon ortalamasını kullan ve parantezle belirt. Örn: "1.75 — 1.60 (${prevStr})".
 2) xGA (maç başı): aynı kural.
 3) Eksik/sakat/cezalı oyuncular: iki takım için güncel listeyi ara ve isim ver.
@@ -288,4 +353,4 @@ async function generatePending(opts = {}) {
   return { ok: true, generated, errors };
 }
 
-module.exports = { generatePending, generateReportFor };
+module.exports = { generatePending, generateReportFor, apiFootballDiag };

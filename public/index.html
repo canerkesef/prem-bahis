@@ -1414,8 +1414,10 @@ async function renderAdmin(el) {
       </p>
       <div class="admin-tools" style="margin-bottom:6px">
         <button class="btn-sm btn-blue" id="ai-gen">🤖 Eksik Raporları Üret</button>
+        <button class="btn-sm" id="af-check" style="background:var(--bg);border:1px solid var(--line);color:var(--ink)">🔎 API-Football Kontrol</button>
       </div>
       <div id="ai-msg" style="margin:6px 0 12px;font-size:13px;color:var(--muted)"></div>
+      <pre id="af-msg" style="margin:6px 0 12px;font-size:11px;color:var(--muted);white-space:pre-wrap;word-break:break-word"></pre>
       <p style="color:var(--muted);font-size:12px;line-height:1.5;margin-bottom:10px">
         Elle de ekleyebilirsin: maçı seç, JSON yapıştır, kaydet.
       </p>
@@ -1586,6 +1588,15 @@ async function renderAdmin(el) {
       am.textContent = t;
       toast('AI rapor üretimi bitti');
     } catch (e) { am.style.color = 'var(--danger)'; am.textContent = e.message; }
+  });
+
+  if ($('#af-check')) $('#af-check').addEventListener('click', async () => {
+    const fm = $('#af-msg');
+    fm.style.color = 'var(--muted)'; fm.textContent = 'API-Football kontrol ediliyor…';
+    try {
+      const r = await api('/admin/apifootball-check');
+      fm.textContent = JSON.stringify(r, null, 2);
+    } catch (e) { fm.style.color = 'var(--danger)'; fm.textContent = e.message; }
   });
 
   // Saha Raporu yapıştır / kaydet / sil

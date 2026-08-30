@@ -9,7 +9,7 @@ const { sql, ensureAdmin, ensureSchema } = require('../src/db');
 const { seedSampleMatches } = require('../src/seed');
 const { refreshMatches, refreshResults, hasApi, fetchStandings, normName } = require('../src/oddsApi');
 const { settleMatch, voidMatch, applyHalfTime } = require('../src/settle');
-const { generatePending } = require('../src/aiReport');
+const { generatePending, apiFootballDiag } = require('../src/aiReport');
 const { computeMarkets } = require('../src/odds-derive');
 
 const app = express();
@@ -266,6 +266,15 @@ app.post('/api/report/:id', reportAuth, async (req, res) => {
 app.post('/api/admin/generate-reports', requireAdmin, async (req, res) => {
   try { res.json(await generatePending({ budgetMs: 55000 })); }
   catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+// Admin tani: API-Football anahtarinin plani ve maca dair gercek yaniti gosterir.
+app.get('/api/admin/apifootball-check', requireAdmin, async (req, res) => {
+  try {
+    const rows = await sql`SELECT id, home_team, away_team, commence_time, markets
+      FROM matches WHERE status='open' AND commence_time > now()
+      ORDER BY commence_time ASC LIMIT 1`;
+    res.json(await apiFootballDiag(rows[0] || null));
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 // Kullanim-tetiklemeli üretim (fire-and-forget; kilitli, bütçeli).
 app.post('/api/generate-report', requireAuth, async (req, res) => {
