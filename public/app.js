@@ -457,8 +457,12 @@ function srEmptyVal(v) {
 }
 function srClean(rows) { return (rows || []).filter((r) => Array.isArray(r) && !srEmptyVal(r[1])); }
 function srRows(rows) {
-  return srClean(rows).map(([k, v]) =>
-    `<div class="sr-row"><span class="sr-k">${k}</span><span class="sr-v">${v}</span></div>`).join('');
+  return srClean(rows).map(([k, v]) => {
+    // H2H satirindaki maclari alt alta goster (";" ile ayrilmis).
+    const isH2H = /h2h|karşıla|karsila/i.test(k);
+    const val = isH2H ? String(v).split(/\s*;\s*/).filter(Boolean).join('<br>') : v;
+    return `<div class="sr-row${isH2H ? ' sr-row-stack' : ''}"><span class="sr-k">${k}</span><span class="sr-v">${val}</span></div>`;
+  }).join('');
 }
 function srGauge(g) {
   const p = Math.max(0, Math.min(100, Math.round(Number(g.pct) || 0)));

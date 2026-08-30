@@ -261,6 +261,8 @@ input{font-family:inherit}
 .sr-k{color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.3px;font-size:11px}
 .sr-v{color:var(--ink);font-weight:700;text-align:right}
 .sr-v i{color:var(--muted);font-weight:500;font-style:italic}
+.sr-row-stack{align-items:flex-start}
+.sr-row-stack .sr-v{line-height:1.5}
 .sr-gauges{display:flex;gap:16px;justify-content:center;margin:16px 0}
 .sr-gauge{--p:0;width:116px;height:116px;border-radius:50%;background:conic-gradient(var(--pri2) calc(var(--p)*1%), var(--chip) 0);display:grid;place-items:center}
 .sr-ginner{width:94px;height:94px;border-radius:50%;background:var(--card);display:grid;place-items:center;text-align:center;box-shadow:inset 0 0 0 1px var(--line)}
