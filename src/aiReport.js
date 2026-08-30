@@ -97,6 +97,25 @@ function extractJson(text) {
   if (i < 0 || j < 0 || j <= i) return null;
   try { return JSON.parse(text.slice(i, j + 1)); } catch (_) { return null; }
 }
+// Hesabin gercekten destekledigi modeli Google'dan sor (ad tahmini yok).
+async function discoverModel(key) {
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+    if (!res.ok) return null;
+    const j = await res.json();
+    const ok = (j.models || [])
+      .filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'))
+      .map((m) => (m.name || '').replace(/^models\//, ''))
+      .filter(Boolean);
+    if (!ok.length) return null;
+    const env = (process.env.GEMINI_MODEL || '').trim();
+    if (env && ok.includes(env)) return env;
+    // flash tercih et (hizli/ucuz), yoksa herhangi biri
+    return ok.find((n) => /flash/i.test(n) && !/(vision|thinking|image|tts|embedding)/i.test(n))
+      || ok.find((n) => /flash/i.test(n)) || ok[0];
+  } catch (_) { return null; }
+}
+
 async function geminiCall(key, model, prompt, useSearch) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
   const body = { contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.4, maxOutputTokens: 1800 } };
@@ -108,7 +127,12 @@ async function geminiCall(key, model, prompt, useSearch) {
 async function callGemini(prompt) {
   const key = (process.env.GEMINI_API_KEY || '').trim();
   if (!key) throw new Error('GEMINI_API_KEY tanimli degil.');
-  const models = RESOLVED_MODEL ? [RESOLVED_MODEL] : modelCandidates();
+  let models;
+  if (RESOLVED_MODEL) models = [RESOLVED_MODEL];
+  else {
+    const found = await discoverModel(key);
+    models = [...new Set([found, ...modelCandidates()].filter(Boolean))];
+  }
   let lastErr = 'Uygun model bulunamadi';
   for (const model of models) {
     for (const useSearch of (GEMINI_SEARCH ? [true, false] : [false])) {
