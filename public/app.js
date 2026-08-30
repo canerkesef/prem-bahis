@@ -253,8 +253,10 @@ async function boot() {
       }
     })
     .catch(() => {});
-  // Eksik AI raporlarını arka planda üret (kilitli/bütçeli; sonucu beklemez).
-  api('/generate-report', { method: 'POST' }).catch(() => {});
+  // Eksik AI raporlarını arka planda üret; bitince bülten kendini tazeler (rozet çıksın).
+  api('/generate-report', { method: 'POST' })
+    .then((r) => { if (r && (r.generated || 0) > 0 && CURRENT_VIEW === 'bulten') render('bulten'); })
+    .catch(() => {});
 }
 
 function updateBalance(b) {
@@ -268,7 +270,9 @@ async function refreshMe() {
 }
 
 // ---------- Render ----------
+let CURRENT_VIEW = 'bulten';
 async function render(view) {
+  CURRENT_VIEW = view;
   if (view !== 'bulten') stopLivePolling(); // baska sekmeye gecince canli yoklamayi durdur
   setActiveNav(view);
   const el = $('#view');
