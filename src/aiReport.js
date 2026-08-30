@@ -8,8 +8,13 @@
 const { sql } = require('./db');
 const { normName } = require('./oddsApi');
 
-const GEMINI_MODEL = (process.env.GEMINI_MODEL || 'gemini-2.0-flash').trim();
 const GEMINI_SEARCH = process.env.AI_WEB_SEARCH !== '0';
+let RESOLVED_MODEL = null; // ilk calisan model bulununca onbellege alinir
+function modelCandidates() {
+  const env = (process.env.GEMINI_MODEL || '').trim();
+  return [...new Set([env, 'gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.5-flash-preview-05-20',
+    'gemini-2.0-flash-lite', 'gemini-1.5-flash'].filter(Boolean))];
+}
 const AF_BASE = 'https://v3.football.api-sports.io';
 const AF_LEAGUE = 39; // Premier League
 
@@ -92,26 +97,39 @@ function extractJson(text) {
   if (i < 0 || j < 0 || j <= i) return null;
   try { return JSON.parse(text.slice(i, j + 1)); } catch (_) { return null; }
 }
+async function geminiCall(key, model, prompt, useSearch) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+  const body = { contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.4, maxOutputTokens: 1800 } };
+  if (useSearch) body.tools = [{ google_search: {} }];
+  const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const txt = await res.text().catch(() => '');
+  return { status: res.status, ok: res.ok, txt };
+}
 async function callGemini(prompt) {
   const key = (process.env.GEMINI_API_KEY || '').trim();
   if (!key) throw new Error('GEMINI_API_KEY tanimli degil.');
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
-  const body = {
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { temperature: 0.4, maxOutputTokens: 1800 },
-  };
-  if (GEMINI_SEARCH) body.tools = [{ google_search: {} }];
-  const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-  if (!res.ok) {
-    const t = await res.text().catch(() => '');
-    throw new Error(`Gemini API hatasi (${res.status}): ${t.slice(0, 200)}`);
+  const models = RESOLVED_MODEL ? [RESOLVED_MODEL] : modelCandidates();
+  let lastErr = 'Uygun model bulunamadi';
+  for (const model of models) {
+    for (const useSearch of (GEMINI_SEARCH ? [true, false] : [false])) {
+      const r = await geminiCall(key, model, prompt, useSearch);
+      if (r.ok) {
+        let data; try { data = JSON.parse(r.txt); } catch (_) { data = {}; }
+        const parts = (((data.candidates || [])[0] || {}).content || {}).parts || [];
+        const rep = extractJson(parts.map((p) => p.text || '').join('\n'));
+        if (!rep) { lastErr = 'Gemini yaniti JSON olarak cozulemedi'; continue; }
+        RESOLVED_MODEL = model; // calisan modeli hatirla
+        return rep;
+      }
+      lastErr = `(${model}${useSearch ? '+arama' : ''}) ${r.status}: ${r.txt.slice(0, 140)}`;
+      const modelGone = r.status === 404 || /not\s*found|no longer available|is not supported|models\//i.test(r.txt);
+      if (modelGone) break;            // bu model yok -> sonraki modele gec
+      const toolIssue = /google_search|tool|grounding/i.test(r.txt);
+      if (!toolIssue) break;           // model sorunu degil, arama da degil -> sonraki model
+      // arama sorunu ise: aramasiz tekrar dene (ust dongu)
+    }
   }
-  const data = await res.json();
-  const parts = (((data.candidates || [])[0] || {}).content || {}).parts || [];
-  const text = parts.map((p) => p.text || '').join('\n');
-  const rep = extractJson(text);
-  if (!rep) throw new Error('Gemini yaniti JSON olarak cozulemedi.');
-  return rep;
+  throw new Error(`Gemini API hatasi: ${lastErr}`);
 }
 
 function buildPrompt(match, nums, facts) {
