@@ -97,10 +97,15 @@ async function fetchFacts(match) {
       }
     } catch (_) {}
   }
-  // 4) H2H son 5 (ID varsa; sezondan bagimsiz gecmis).
+  // 4) H2H son 5 (ID varsa). Ucretsiz planda "last" parametresi KAPALI; parametresiz
+  //    cek, oynanmis maclari tarihe gore sirala, son 5'i al.
   if (hid && aid) {
     try {
-      const h2h = await afGet(`/fixtures/headtohead?h2h=${hid}-${aid}&last=5`) || [];
+      let h2h = await afGet(`/fixtures/headtohead?h2h=${hid}-${aid}`) || [];
+      h2h = h2h
+        .filter((f) => f && f.fixture && f.goals && f.goals.home != null && f.goals.away != null)
+        .sort((a, b) => new Date(b.fixture.date) - new Date(a.fixture.date))
+        .slice(0, 5);
       facts.h2h = h2h.map((f) => ({
         res: `${f.teams.home.name} ${f.goals.home}-${f.goals.away} ${f.teams.away.name}`.replace(/ FC/g, ''),
         when: (f.fixture.date || '').slice(0, 7),
@@ -144,7 +149,7 @@ async function apiFootballDiag(match) {
     const aid = await afTeamId(match.away_team);
     out.teamIds = { home: hid, away: aid };
     if (hid && aid) {
-      const h = await call(`/fixtures/headtohead?h2h=${hid}-${aid}&last=5`);
+      const h = await call(`/fixtures/headtohead?h2h=${hid}-${aid}`);
       out.h2hStatus = h.status; out.h2hCount = h.results; out.h2hErrors = h.errors;
     }
   }
