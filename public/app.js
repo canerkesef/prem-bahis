@@ -297,6 +297,9 @@ async function renderBulten(el) {
     `<div class="section-title">Maçlar <small>${matches.length} maç</small></div>` +
     matches.map(matchCard).join('') +
     `<p class="foot-tz">Tüm saatler Türkiye saati ile gösterilmektedir · Maça dokun, oranlar açılsın</p>`;
+  $$('.report-badge', el).forEach((b) =>
+    b.addEventListener('click', (e) => { e.stopPropagation(); openReportPanel(b.dataset.report); })
+  );
   $$('.match-lite', el).forEach((row) =>
     row.addEventListener('click', () => openMatchPanel(row.dataset.mid))
   );
@@ -356,6 +359,9 @@ function matchCard(m) {
   const betBadge = mine > 0
     ? `<div class="bet-done">✓ Kupon yaptınız${mine > 1 ? ` <b>(${mine})</b>` : ''}</div>`
     : '';
+  const reportBadge = m.has_report
+    ? `<div class="report-badge" data-report="${m.id}" role="button" title="Saha Raporu'nu aç">📋 Saha Raporu hazır<span class="rb-go">Görüntüle ›</span></div>`
+    : '';
 
   const fixture = `
     <div class="fixture">
@@ -370,6 +376,7 @@ function matchCard(m) {
   if (started) {
     return `<div class="match match-live">
       ${betBadge}
+      ${reportBadge}
       ${fixture}
       <div class="live-row">
         <span class="live-badge"><span class="live-dot"></span>CANLI</span>
@@ -380,6 +387,7 @@ function matchCard(m) {
 
   return `<div class="match match-lite" data-mid="${m.id}">
     ${betBadge}
+    ${reportBadge}
     ${fixture}
     <div class="lite-ms">
       <span class="ms-pill"><i>1</i>${oneline(ms['1'])}</span>
@@ -481,15 +489,16 @@ async function openMatchPanel(mid) {
   const m = matches.find((x) => x.id === mid);
   if (!m) return toast('Maç bulunamadı', true);
   const k = fmtKick(m.commence_time);
-  // Rapor varsa Saha Raporu; yoksa 1 gün kala otomatik önizleme.
   const kt = new Date(m.commence_time).getTime();
+  // Saha Raporu artik AYRI panelde acilir; oran panelinde sadece "Gör" butonu durur.
+  const hasReport = !!m.has_report;
+  const reportBtn = hasReport
+    ? `<button type="button" class="saha-open-btn" id="open-saha" data-mid="${mid}">📋 Saha Raporu'nu Gör</button>`
+    : '';
+  // Rapor yoksa ve maça 1 günden az kaldıysa hafif önizleme göster.
   let previewHtml = '';
-  if (kt > Date.now()) {
-    try {
-      const p = await api(`/matches/${mid}/preview`);
-      if (p.report && Object.keys(p.report).length) previewHtml = sahaReportHtml(p.report, m);
-      else if (kt - Date.now() <= 86400000) previewHtml = matchPreviewHtml(p);
-    } catch (_) {}
+  if (!hasReport && kt > Date.now() && kt - Date.now() <= 86400000) {
+    try { const p = await api(`/matches/${mid}/preview`); previewHtml = matchPreviewHtml(p); } catch (_) {}
   }
   $('#match-content').innerHTML = `
     <div class="panel-head">
@@ -499,8 +508,10 @@ async function openMatchPanel(mid) {
       </div>
       <div class="kick"><b>${k.day}</b>${k.time}</div>
     </div>
+    ${reportBtn}
     ${previewHtml}
     ${marketsHtml(m)}`;
+  if ($('#open-saha')) $('#open-saha').addEventListener('click', () => { closeMatchPanel(); openReportPanel(mid); });
   $$('#match-content .mgroup-head').forEach((h) =>
     h.addEventListener('click', () => h.parentElement.classList.toggle('open'))
   );
@@ -515,6 +526,30 @@ async function openMatchPanel(mid) {
 }
 function closeMatchPanel() {
   $('#match-modal').classList.add('hidden');
+}
+
+// ----- Saha Raporu paneli (oranlardan ayri, kendi modalinda) -----
+async function openReportPanel(mid) {
+  const { matches } = await api('/matches');
+  const m = matches.find((x) => x.id === mid);
+  if (!m) return toast('Maç bulunamadı', true);
+  $('#report-content').innerHTML = '<div class="sr-loading">Saha Raporu yükleniyor…</div>';
+  $('#report-modal').scrollTop = 0;
+  $('#report-modal').classList.remove('hidden');
+  try {
+    const p = await api(`/matches/${mid}/preview`);
+    if (p.report && Object.keys(p.report).length) {
+      $('#report-content').innerHTML = sahaReportHtml(p.report, m);
+    } else {
+      $('#report-content').innerHTML = '<div class="empty">Bu maç için Saha Raporu henüz hazır değil.</div>';
+    }
+  } catch (_) {
+    $('#report-content').innerHTML = '<div class="empty">Saha Raporu yüklenemedi.</div>';
+  }
+  $('#report-modal').scrollTop = 0;
+}
+function closeReportPanel() {
+  $('#report-modal').classList.add('hidden');
 }
 
 // ----- Kupon paneli -----
@@ -595,6 +630,10 @@ $('#bet-modal').addEventListener('click', (e) => {
 $('#match-close').addEventListener('click', closeMatchPanel);
 $('#match-modal').addEventListener('click', (e) => {
   if (e.target.id === 'match-modal') closeMatchPanel();
+});
+if ($('#report-close')) $('#report-close').addEventListener('click', closeReportPanel);
+if ($('#report-modal')) $('#report-modal').addEventListener('click', (e) => {
+  if (e.target.id === 'report-modal') closeReportPanel();
 });
 
 // ----- Kuponlarim -----

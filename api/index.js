@@ -171,7 +171,7 @@ app.get('/api/matches', requireAuth, async (req, res) => {
     const mine = await sql`SELECT match_id, COUNT(*)::int AS n FROM coupons WHERE user_id=${req.user.id} GROUP BY match_id`;
     const cmap = {};
     for (const c of mine) cmap[c.match_id] = c.n;
-    res.json({ matches: rows.map((m) => { const o = matchOut(m); o.my_bets = cmap[m.id] || 0; return o; }) });
+    res.json({ matches: rows.map((m) => { const o = matchOut(m); o.my_bets = cmap[m.id] || 0; o.has_report = !!m.report; return o; }) });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
   }
