@@ -311,6 +311,19 @@ async function renderBulten(el) {
 
 // ----- Canli skor: PAYLASIMLI onbellekten okur (10 sn'de bir) -----
 let liveTimer = null;
+function liveLabel(info, kickMs) {
+  const s = info.status;
+  if (s === 'PAUSED') return 'DEVRE ARASI';
+  if (s === 'FINISHED') return 'BİTTİ';
+  // IN_PLAY: football-data dakikayi verdiyse onu; vermediyse baslama saatinden tahmini (~).
+  let min = info.minute, approx = false;
+  if (min == null && kickMs) {
+    const e = Math.floor((Date.now() - kickMs) / 60000);
+    if (e >= 0 && e < 160) { min = e; approx = true; }
+  }
+  if (min == null) return 'CANLI';
+  return `CANLI · ${approx ? '~' : ''}${min}'`;
+}
 async function updateLiveScores() {
   try {
     const { live } = await api('/live');
@@ -319,10 +332,8 @@ async function updateLiveScores() {
       const el = document.querySelector(`.live-score[data-live="${id}"]`);
       const lbl = document.querySelector(`[data-livelbl="${id}"]`);
       if (el && info.h != null && info.a != null) el.textContent = `${info.h} - ${info.a}`;
-      if (lbl) {
-        const s = info.status;
-        lbl.textContent = s === 'PAUSED' ? 'DEVRE ARASI' : s === 'FINISHED' ? 'BİTTİ' : 'CANLI';
-      }
+      const kickMs = el ? Number(el.dataset.kick) || 0 : 0;
+      if (lbl) lbl.textContent = liveLabel(info, kickMs);
     });
   } catch (_) {}
 }
@@ -416,8 +427,8 @@ function matchCard(m) {
       ${fixture}
       <div class="live-row">
         <span class="live-badge"><span class="live-dot"></span><span data-livelbl="${m.id}">CANLI</span></span>
-        <span class="live-score" data-live="${m.id}"></span>
         <span class="live-note">bahisler kapandı</span>
+        <span class="live-score" data-live="${m.id}" data-kick="${new Date(m.commence_time).getTime()}"></span>
       </div>
     </div>`;
   }
