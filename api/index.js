@@ -224,7 +224,7 @@ app.get('/api/matches/:id/preview', requireAuth, async (req, res) => {
     res.json({
       home_team: m.home_team, away_team: m.away_team, commence_time: m.commence_time,
       probs, ou, kg, scores, home, away, standingsError,
-      report: parseMarkets(m.report), report_at: m.report_at || null,
+      report: m.report ? parseMarkets(m.report) : null, report_at: m.report_at || null,
     });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
@@ -259,6 +259,21 @@ app.post('/api/report/:id', reportAuth, async (req, res) => {
     if (!upd.length) return res.status(404).json({ error: 'Mac bulunamadi.' });
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+
+// Admin: Saha Raporu yaz/sil (admin oturumuyla; tarayicidan yapistirma icin).
+app.post('/api/admin/report/:id', requireAdmin, async (req, res) => {
+  try {
+    const report = req.body && req.body.report;
+    if (!report || typeof report !== 'object') return res.status(400).json({ error: 'Gecersiz rapor (JSON bekleniyor).' });
+    const upd = await sql`UPDATE matches SET report=${JSON.stringify(report)}::jsonb, report_at=now() WHERE id=${req.params.id} RETURNING id`;
+    if (!upd.length) return res.status(404).json({ error: 'Mac bulunamadi.' });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+app.post('/api/admin/report/:id/delete', requireAdmin, async (req, res) => {
+  try { await sql`UPDATE matches SET report=NULL, report_at=NULL WHERE id=${req.params.id}`; res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 
 // Gercek Premier Lig puan durumu (football-data.org)

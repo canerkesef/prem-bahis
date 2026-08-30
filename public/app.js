@@ -469,7 +469,7 @@ async function openMatchPanel(mid) {
   if (kt > Date.now()) {
     try {
       const p = await api(`/matches/${mid}/preview`);
-      if (p.report) previewHtml = sahaReportHtml(p.report, m);
+      if (p.report && Object.keys(p.report).length) previewHtml = sahaReportHtml(p.report, m);
       else if (kt - Date.now() <= 86400000) previewHtml = matchPreviewHtml(p);
     } catch (_) {}
   }
@@ -909,6 +909,22 @@ async function renderAdmin(el) {
     </div>
 
     <div class="card">
+      <h3>📊 Saha Raporu Yapıştır</h3>
+      <p style="color:var(--muted);font-size:13px;line-height:1.5;margin-bottom:10px">
+        Maçı seç, Claude'un verdiği rapor JSON'unu aşağıya yapıştır ve kaydet. Maça dokununca panelde görünür.
+      </p>
+      <select id="rep-match" style="width:100%;background:var(--bg);border:1px solid var(--line);color:var(--ink);padding:10px;border-radius:8px;font-size:14px;margin-bottom:8px">
+        ${matches.map((m) => `<option value="${m.id}">${m.home_team} - ${m.away_team}</option>`).join('')}
+      </select>
+      <textarea id="rep-json" rows="6" placeholder='{"meta":{...},"intro":"...","data":[...],...}' style="width:100%;background:var(--bg);border:1px solid var(--line);color:var(--ink);padding:10px;border-radius:8px;font-size:12px;font-family:monospace"></textarea>
+      <div class="admin-tools" style="margin-top:8px">
+        <button class="btn-sm btn-ok" id="rep-save">Raporu Kaydet</button>
+        <button class="btn-sm btn-no" id="rep-del">Raporu Sil</button>
+      </div>
+      <div id="rep-msg" style="margin-top:8px;font-size:13px;color:var(--muted)"></div>
+    </div>
+
+    <div class="card">
       <h3>✏️ Sonucu Düzelt (Kural 8)</h3>
       <p style="color:var(--muted);font-size:13px;line-height:1.5;margin-bottom:12px">
         Yanlış sonuçlanan maçı doğru skorla yeniden hesaplar. Kuponlar yeni skora göre
@@ -1049,6 +1065,29 @@ async function renderAdmin(el) {
       }
     })
   );
+
+  // Saha Raporu yapıştır / kaydet / sil
+  const repMsg = $('#rep-msg');
+  if ($('#rep-save')) $('#rep-save').addEventListener('click', async () => {
+    const id = $('#rep-match').value;
+    let report;
+    try { report = JSON.parse($('#rep-json').value); }
+    catch (e) { repMsg.style.color = 'var(--danger)'; repMsg.textContent = 'JSON hatalı: ' + e.message; return; }
+    try {
+      await api(`/admin/report/${id}`, { method: 'POST', body: { report } });
+      repMsg.style.color = 'var(--ok)'; repMsg.textContent = 'Rapor kaydedildi ✅ Maça dokununca görünür.';
+      toast('Saha Raporu kaydedildi ✅');
+    } catch (err) { repMsg.style.color = 'var(--danger)'; repMsg.textContent = err.message; }
+  });
+  if ($('#rep-del')) $('#rep-del').addEventListener('click', async () => {
+    const id = $('#rep-match').value;
+    try {
+      await api(`/admin/report/${id}/delete`, { method: 'POST' });
+      $('#rep-json').value = '';
+      repMsg.style.color = 'var(--muted)'; repMsg.textContent = 'Rapor silindi.';
+      toast('Rapor silindi');
+    } catch (err) { repMsg.style.color = 'var(--danger)'; repMsg.textContent = err.message; }
+  });
 }
 
 // ---------- Acilis animasyonu kaldir ----------
