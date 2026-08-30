@@ -106,16 +106,22 @@ async function listModels(key, ver) {
     .filter(Boolean);
   return { ver, ok: true, status: res.status, names };
 }
-function pickModel(names) {
-  const env = (process.env.GEMINI_MODEL || '').trim();
-  if (env && names.includes(env)) return env;
+// Aday modelleri tercih sirasina diz (en iyi ilk): once GEMINI_MODEL, sonra flash, sonra pro.
+function orderModels(names) {
   const bad = /(vision|thinking|image|tts|audio|embedding|learnlm|aqa|gemma)/i;
-  // Once flash (hizli/ucuz), sonra pro, sonra herhangi biri
-  return names.find((n) => /flash/i.test(n) && !bad.test(n))
-    || names.find((n) => /flash/i.test(n))
-    || names.find((n) => /pro/i.test(n) && !bad.test(n))
-    || names.find((n) => !bad.test(n))
-    || names[0] || null;
+  const env = (process.env.GEMINI_MODEL || '').trim();
+  const score = (n) => {
+    let s = 0;
+    if (env && n === env) s += 1000;
+    if (/flash/i.test(n)) s += 100;
+    if (/pro/i.test(n)) s += 50;
+    if (/2\.5/.test(n)) s += 20; else if (/2\.0/.test(n)) s += 15; else if (/1\.5/.test(n)) s += 5;
+    if (/latest/i.test(n)) s += 3;
+    if (/preview|exp|-\d{2,}/i.test(n)) s -= 5; // kararsiz surumleri geri planda
+    if (bad.test(n)) s -= 500;
+    return s;
+  };
+  return [...names].sort((a, b) => score(b) - score(a));
 }
 
 async function genContent(key, ver, model, prompt, useSearch) {
@@ -127,18 +133,25 @@ async function genContent(key, ver, model, prompt, useSearch) {
   return { status: res.status, ok: res.ok, txt };
 }
 
-// Calisan {ver, model} ciftini gercek ListModels ciktisindan cozer.
+// GERCEKTEN calisan {ver, model} ciftini bul: ListModels'a guvenme, kucuk bir
+// deneme cagrisi (araci olmadan) ile 200 donen ilk modeli sec.
 async function resolveModel(key) {
   const diag = [];
   for (const ver of ['v1beta', 'v1']) {
     const r = await listModels(key, ver);
-    if (!r.ok) { diag.push(`${ver} ListModels ${r.status}: ${r.err}`); continue; }
+    if (!r.ok) { diag.push(`${ver} ListModels ${r.status}: ${r.err.slice(0, 80)}`); continue; }
     if (!r.names.length) { diag.push(`${ver}: generateContent destekleyen model yok`); continue; }
-    const model = pickModel(r.names);
-    if (model) return { ver, model, all: r.names, diag };
-    diag.push(`${ver}: uygun model secilemedi (${r.names.slice(0, 6).join(', ')})`);
+    const ordered = orderModels(r.names);
+    let tested = 0;
+    for (const model of ordered) {
+      if (tested >= 5) break; // kotayi bosa harcama; en iyi 5 adayi dene
+      tested++;
+      const t = await genContent(key, ver, model, 'ping', false);
+      if (t.ok) return { ver, model, diag };
+      diag.push(`${ver}/${model} test ${t.status}: ${t.txt.slice(0, 60)}`);
+    }
   }
-  return { ver: null, model: null, all: [], diag };
+  return { ver: null, model: null, diag };
 }
 
 async function callGemini(prompt) {
@@ -151,10 +164,12 @@ async function callGemini(prompt) {
     const r = await resolveModel(key);
     ver = r.ver; model = r.model; diag = r.diag;
     if (!model) {
-      throw new Error(`Gemini modeli bulunamadi. Anahtarin gecerli mi ve "Generative Language API" acik mi? Ayrinti: ${diag.join(' | ') || 'ListModels bos'}`);
+      throw new Error(`Calisan Gemini modeli bulunamadi. Anahtar gecerli mi ve Google Cloud'da "Generative Language API" acik mi? Denemeler: ${diag.slice(0, 6).join(' | ') || 'ListModels bos'}`);
     }
   }
 
+  // Once aramali dene; HERHANGI bir hatada aramasiza dus (arama araci bazi
+  // modellerde/surumlerde beklenmedik hata verebiliyor).
   let lastErr = '';
   for (const useSearch of (GEMINI_SEARCH ? [true, false] : [false])) {
     const r = await genContent(key, ver, model, prompt, useSearch);
@@ -167,11 +182,8 @@ async function callGemini(prompt) {
       return rep;
     }
     lastErr = `(${ver}/${model}${useSearch ? '+arama' : ''}) ${r.status}: ${r.txt.slice(0, 160)}`;
-    // Arama araci sorunu ise aramasiz tekrar denenir (ust dongu); degilse cikilir.
-    const toolIssue = /google_search|tool|grounding|function/i.test(r.txt);
-    if (!toolIssue) break;
   }
-  const hint = diag.length ? ` [ListModels: ${diag.join(' | ')}]` : '';
+  const hint = diag.length ? ` [test: ${diag.slice(0, 4).join(' | ')}]` : '';
   throw new Error(`Gemini API hatasi: ${lastErr}${hint}`);
 }
 
