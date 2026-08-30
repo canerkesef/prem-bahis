@@ -7,7 +7,7 @@ const bcrypt = require('bcryptjs');
 
 const { sql, ensureAdmin, ensureSchema } = require('../src/db');
 const { seedSampleMatches } = require('../src/seed');
-const { refreshMatches, refreshResults, hasApi, fetchStandings } = require('../src/oddsApi');
+const { refreshMatches, refreshResults, hasApi, fetchStandings, normName } = require('../src/oddsApi');
 const { settleMatch, voidMatch, applyHalfTime } = require('../src/settle');
 const { computeMarkets } = require('../src/odds-derive');
 
@@ -18,6 +18,8 @@ const START_BALANCE = Number(process.env.START_BALANCE || 1000);
 const MIN_STAKE = Number(process.env.MIN_STAKE || 50);
 // KURAL 2: Turnuva bu tarihte biter; bu andan sonra yeni kupon yapilamaz.
 const TOURNAMENT_END = process.env.TOURNAMENT_END || '2027-01-01T00:00:00+03:00';
+// Saha Raporu yazma yetkisi (zamanlanmis gorev bu anahtarla rapor gonderir).
+const REPORT_TOKEN = (process.env.REPORT_TOKEN || '').trim();
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
 app.set('trust proxy', 1);
@@ -172,6 +174,91 @@ app.get('/api/matches', requireAuth, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
   }
+});
+
+// Maç önizleme raporu: mevcut oranlar + gerçek puan durumu/formdan otomatik.
+// (Ücretsiz; ek API/anahtar gerektirmez. IY skoru gibi puan durumu football-data'dan.)
+app.get('/api/matches/:id/preview', requireAuth, async (req, res) => {
+  try {
+    const rows = await sql`SELECT * FROM matches WHERE id=${req.params.id}`;
+    const m = rows[0];
+    if (!m) return res.status(404).json({ error: 'Mac bulunamadi.' });
+    const mk = parseMarkets(m.markets);
+
+    // Oranlardan olasilik (marji cikarmak icin normalize).
+    const pct = (x) => Math.round(x * 1000) / 10;
+    const normSet = (obj, keys) => {
+      if (!obj) return null;
+      const inv = keys.map((k) => (obj[k] ? 1 / Number(obj[k]) : 0));
+      const s = inv.reduce((a, b) => a + b, 0);
+      if (!s) return null;
+      const out = {};
+      keys.forEach((k, i) => { out[k] = pct(inv[i] / s); });
+      return out;
+    };
+    const probs = normSet(mk['1x2'], ['1', 'X', '2']);
+    const ou = normSet(mk['ou25'], ['over', 'under']);
+    const kg = normSet(mk['btts'], ['yes', 'no']);
+
+    // En olasi skorlar (cs pazarindan; dusuk oran = yuksek olasilik).
+    let scores = [];
+    if (mk['cs']) {
+      const entries = Object.entries(mk['cs']).filter(([k, v]) => k !== 'diger' && Number(v) > 0);
+      const inv = entries.map(([k, v]) => [k, 1 / Number(v)]);
+      const tot = inv.reduce((a, [, p]) => a + p, 0) + (mk['cs'].diger ? 1 / Number(mk['cs'].diger) : 0);
+      scores = inv.sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, p]) => ({ score: k, prob: pct(p / tot) }));
+    }
+
+    // Gerçek puan durumu / form (football-data; token gerekli, yoksa atlanir).
+    let home = null, away = null, standingsError = null;
+    const st = await fetchStandings();
+    if (st.ok && Array.isArray(st.table)) {
+      const find = (name) => st.table.find((t) => normName(t.full) === normName(name) || normName(t.team) === normName(name)) || null;
+      const slim = (t) => t && { pos: t.pos, points: t.points, played: t.played, form: t.form, won: t.won, draw: t.draw, lost: t.lost };
+      home = slim(find(m.home_team));
+      away = slim(find(m.away_team));
+    } else {
+      standingsError = st.error || null;
+    }
+
+    res.json({
+      home_team: m.home_team, away_team: m.away_team, commence_time: m.commence_time,
+      probs, ou, kg, scores, home, away, standingsError,
+      report: parseMarkets(m.report), report_at: m.report_at || null,
+    });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+// --- Saha Raporu: yazma & kuyruk (REPORT_TOKEN ile; zamanlanmis gorev kullanir) ---
+function reportAuth(req, res, next) {
+  if (!REPORT_TOKEN) return res.status(503).json({ error: 'REPORT_TOKEN tanimli degil.' });
+  if ((req.headers.authorization || '') !== `Bearer ${REPORT_TOKEN}`) return res.status(401).json({ error: 'Yetkisiz.' });
+  next();
+}
+// Rapor bekleyen yaklasan maclar (+ oran verisi). Gorev bunlari uretir.
+app.get('/api/report/queue', reportAuth, async (req, res) => {
+  try {
+    const days = Number(req.query.days || 2);
+    const rows = await sql`SELECT id, home_team, away_team, commence_time, markets, report_at
+      FROM matches WHERE status='open' AND commence_time > now() AND commence_time < now() + (${days} * interval '1 day')
+      ORDER BY commence_time ASC`;
+    res.json({ matches: rows.map((m) => ({
+      id: m.id, home_team: m.home_team, away_team: m.away_team, commence_time: m.commence_time,
+      odds: parseMarkets(m.markets), has_report: !!m.report_at,
+    })) });
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+// Bir maca "Saha Raporu" yaz/guncelle.
+app.post('/api/report/:id', reportAuth, async (req, res) => {
+  try {
+    const report = req.body && req.body.report;
+    if (!report || typeof report !== 'object') return res.status(400).json({ error: 'Gecersiz rapor.' });
+    const upd = await sql`UPDATE matches SET report=${JSON.stringify(report)}::jsonb, report_at=now() WHERE id=${req.params.id} RETURNING id`;
+    if (!upd.length) return res.status(404).json({ error: 'Mac bulunamadi.' });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 
 // Gercek Premier Lig puan durumu (football-data.org)

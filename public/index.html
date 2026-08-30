@@ -251,6 +251,60 @@ input{font-family:inherit}
 .iy-line b{color:var(--ink)}
 .iy-missing{color:var(--warn);font-weight:700}
 
+/* ---------- Saha Raporu (site paleti: beyaz + mor/pembe) ---------- */
+.saha{background:var(--card);border:1px solid #e4d7f3;border-radius:14px;padding:16px 15px;margin-bottom:14px;
+  box-shadow:0 6px 22px rgba(61,25,91,.10);overflow:hidden}
+.saha::before{content:"";display:block;height:4px;margin:-16px -15px 14px;background:linear-gradient(90deg,var(--pri),var(--pri2))}
+.sr-title{text-align:center;color:var(--pri);font-weight:800;letter-spacing:5px;font-size:15px}
+.sr-meta{text-align:center;color:var(--muted);font-size:11px;letter-spacing:.6px;margin:6px auto 0;padding-top:8px;border-top:1px solid var(--line);width:80%}
+.sr-teams{display:flex;align-items:center;gap:8px;margin:14px 0 4px}
+.sr-tn{font-weight:800;font-size:18px;color:var(--ink);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sr-tn.sr-right{text-align:right}
+.sr-vs{flex:none;background:linear-gradient(90deg,var(--pri),var(--pri2));color:#fff;font-size:10px;font-weight:800;padding:3px 8px;border-radius:5px}
+.sr-p{color:#3d2a52;font-size:12.5px;line-height:1.6;margin:10px 0;padding-left:11px;border-left:3px solid var(--pri2)}
+.sr-sec{color:var(--pri2);font-weight:800;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;margin:16px 0 6px}
+.sr-row{display:flex;justify-content:space-between;gap:12px;font-size:12.5px;padding:7px 0;border-top:1px solid var(--line)}
+.sr-k{color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.3px;font-size:11px}
+.sr-v{color:var(--ink);font-weight:700;text-align:right}
+.sr-v i{color:var(--muted);font-weight:500;font-style:italic}
+.sr-gauges{display:flex;gap:16px;justify-content:center;margin:16px 0}
+.sr-gauge{--p:0;width:116px;height:116px;border-radius:50%;background:conic-gradient(var(--pri2) calc(var(--p)*1%), var(--chip) 0);display:grid;place-items:center}
+.sr-ginner{width:94px;height:94px;border-radius:50%;background:var(--card);display:grid;place-items:center;text-align:center;box-shadow:inset 0 0 0 1px var(--line)}
+.sr-gnum{font-size:24px;font-weight:800;color:var(--pri)}
+.sr-glbl{font-size:9px;color:var(--muted);letter-spacing:.5px;max-width:78px;line-height:1.2;margin-top:2px}
+.sr-concl{background:var(--soft);border:1px solid #e4d7f3;border-radius:10px;padding:12px;margin:16px 0;text-align:center}
+.sr-cl{color:var(--pri2);font-size:10px;font-weight:800;letter-spacing:2px}
+.sr-ct{color:var(--pri);font-weight:800;font-size:17px;margin-top:6px}
+.sr-cn{color:var(--muted);font-size:11px;font-style:italic;margin-top:5px}
+.sr-h2h{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.sr-h2h-i{flex:1;min-width:70px;background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:8px 6px;text-align:center}
+.sr-h2h-i b{display:block;color:var(--ink);font-size:12px}
+.sr-h2h-i span{color:var(--muted);font-size:10px}
+.sr-note{color:var(--muted);font-size:11px;font-style:italic;margin-top:8px}
+.sr-foot{color:var(--muted);font-size:10px;text-align:center;margin-top:16px;border-top:1px solid var(--line);padding-top:10px;line-height:1.5}
+
+/* ---------- Mac onizleme raporu (panel) ---------- */
+.preview-card{background:linear-gradient(180deg,#f7f3fc,#fff);border:1px solid #e4d7f3;border-radius:12px;padding:13px 14px;margin-bottom:14px}
+.prev-title{font-weight:800;color:var(--pri);font-size:14px;margin-bottom:10px}
+.prev-bar{display:flex;height:12px;border-radius:6px;overflow:hidden;background:var(--chip)}
+.prev-bar i{display:block;height:100%}
+.prev-bar .s1{background:var(--pri)}.prev-bar .sx{background:#b9a7cf}.prev-bar .s2{background:var(--pri2)}
+.prev-legend{display:flex;justify-content:space-between;margin:6px 2px 8px;font-size:12px;color:var(--muted)}
+.prev-legend b{color:var(--ink)}
+.prev-row{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:6px 0;border-top:1px solid var(--line)}
+.prev-k{color:var(--muted);font-weight:600;white-space:nowrap}
+.prev-v{color:var(--ink);font-weight:700;text-align:right}
+.prev-v small{color:var(--muted);font-weight:600}
+.prev-stand{display:flex;gap:10px;margin-top:10px}
+.ts{flex:1;min-width:0;background:#fff;border:1px solid var(--line);border-radius:10px;padding:9px}
+.ts-name{font-weight:700;font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ts-meta{font-size:11.5px;color:var(--muted);margin:3px 0 6px}
+.ts-meta b{color:var(--ink)}
+.ts-form{display:flex;gap:3px;flex-wrap:wrap}
+.fdot{display:inline-grid;place-items:center;width:17px;height:17px;border-radius:5px;font-size:10px;font-weight:800;color:#fff;background:#9aa0ad}
+.fdot.ok{background:var(--ok)}.fdot.no{background:var(--danger)}.fdot.draw{background:#9aa0ad}
+.prev-note{font-size:10.5px;color:var(--muted);margin-top:10px;text-align:center;line-height:1.4}
+
 /* ---------- Bultende "kupon yaptiniz" rozeti ---------- */
 .bet-done{display:inline-block;background:#e7f7ee;color:#12a05c;border:1px solid #bfe8d2;border-radius:20px;font-size:11.5px;font-weight:800;padding:2px 10px;margin-bottom:9px}
 .bet-done b{font-weight:800}
@@ -809,11 +863,79 @@ function marketsHtml(m) {
 }
 
 // Maca tiklayinca acilan (asagidan kayan) oran paneli
+// Maç 1 günden yakınsa gösterilen otomatik önizleme raporu (oran + puan durumu).
+function fmtForm(f) {
+  if (!f) return '<small style="color:var(--muted)">form yok</small>';
+  const map = { W: ['G', 'ok'], D: ['B', 'draw'], L: ['M', 'no'] };
+  const arr = f.split(/[^WDL]/i).filter(Boolean).map((c) => c.toUpperCase());
+  return arr.map((ch) => { const [lab, cls] = map[ch] || ['?', '']; return `<span class="fdot ${cls}">${lab}</span>`; }).join('') || '<small style="color:var(--muted)">form yok</small>';
+}
+function teamStand(name, t) {
+  if (!t) return `<div class="ts"><div class="ts-name">${name}</div><div class="ts-meta" style="color:var(--muted)">puan durumu yok</div></div>`;
+  return `<div class="ts"><div class="ts-name">${name}</div>
+    <div class="ts-meta"><b>${t.pos}.</b> sıra · <b>${t.points}</b> puan</div>
+    <div class="ts-form">${fmtForm(t.form)}</div></div>`;
+}
+function matchPreviewHtml(p) {
+  if (!p) return '';
+  const pr = p.probs, ou = p.ou, kg = p.kg;
+  const bar = pr ? `<div class="prev-bar"><i class="s1" style="width:${pr['1']}%"></i><i class="sx" style="width:${pr.X}%"></i><i class="s2" style="width:${pr['2']}%"></i></div>
+    <div class="prev-legend"><span>1 <b>%${pr['1']}</b></span><span>X <b>%${pr.X}</b></span><span>2 <b>%${pr['2']}</b></span></div>` : '';
+  const sc = (p.scores && p.scores.length) ? `<div class="prev-row"><span class="prev-k">En olası skorlar</span><span class="prev-v">${p.scores.map((s) => `${s.score} <small>%${s.prob}</small>`).join(' · ')}</span></div>` : '';
+  const ouRow = ou ? `<div class="prev-row"><span class="prev-k">2.5 Gol</span><span class="prev-v">Üst %${ou.over} · Alt %${ou.under}</span></div>` : '';
+  const kgRow = kg ? `<div class="prev-row"><span class="prev-k">Karşılıklı Gol</span><span class="prev-v">Var %${kg.yes} · Yok %${kg.no}</span></div>` : '';
+  const stand = (p.home || p.away) ? `<div class="prev-stand">${teamStand(p.home_team, p.home)}${teamStand(p.away_team, p.away)}</div>` : '';
+  return `<div class="preview-card">
+    <div class="prev-title">📊 Maç Önizlemesi</div>
+    ${bar}${sc}${ouRow}${kgRow}${stand}
+    <div class="prev-note">Oranlar ve güncel puan durumundan otomatik üretildi · G: galibiyet, B: beraberlik, M: mağlubiyet</div>
+  </div>`;
+}
+
+// PDF tarzi "Saha Raporu" (koyu/altin) — zamanlanmis gorevin urettigi raporu gosterir.
+function srRows(rows) {
+  return (rows || []).map(([k, v]) =>
+    `<div class="sr-row"><span class="sr-k">${k}</span><span class="sr-v">${v != null && v !== '' ? v : '<i>veri yok</i>'}</span></div>`).join('');
+}
+function srGauge(g) {
+  const p = Math.max(0, Math.min(100, Math.round(Number(g.pct) || 0)));
+  return `<div class="sr-gauge" style="--p:${p}"><div class="sr-ginner"><div class="sr-gnum">%${p}</div><div class="sr-glbl">${g.label || ''}</div></div></div>`;
+}
+function sahaReportHtml(r, m) {
+  if (!r) return '';
+  const meta = r.meta || {};
+  const metaLine = [meta.league, meta.week, meta.date, meta.stadium].filter(Boolean).join(' · ');
+  const S = (t) => `<div class="sr-sec">${t}</div>`;
+  return `<div class="saha">
+    <div class="sr-title">SAHA RAPORU</div>
+    ${metaLine ? `<div class="sr-meta">${metaLine}</div>` : ''}
+    <div class="sr-teams"><span class="sr-tn">${m.home_team}</span><span class="sr-vs">VS</span><span class="sr-tn sr-right">${m.away_team}</span></div>
+    ${r.intro ? `<p class="sr-p">${r.intro}</p>` : ''}
+    ${r.data && r.data.length ? S('MAÇ VERİLERİ') + srRows(r.data) : ''}
+    ${r.gauges && r.gauges.length ? `<div class="sr-gauges">${r.gauges.map(srGauge).join('')}</div>` : ''}
+    ${r.conclusion ? `<div class="sr-concl"><div class="sr-cl">RAPORUN SONUCU</div><div class="sr-ct">${r.conclusion.title || ''}</div>${r.conclusion.note ? `<div class="sr-cn">${r.conclusion.note}</div>` : ''}</div>` : ''}
+    ${r.h2h && r.h2h.length ? S('SON KARŞILAŞMALAR') + `<div class="sr-h2h">${r.h2h.map((x) => `<div class="sr-h2h-i"><b>${x.res || ''}</b><span>${x.when || ''}</span></div>`).join('')}</div>` + (r.h2h_note ? `<div class="sr-note">${r.h2h_note}</div>` : '') : ''}
+    ${r.extras && r.extras.length ? S('EK VERİLER') + srRows(r.extras) : ''}
+    ${r.why ? S('NEDEN BU SONUÇ?') + `<p class="sr-p">${r.why}</p>` : ''}
+    ${r.footer ? `<div class="sr-foot">${r.footer}</div>` : ''}
+  </div>`;
+}
+
 async function openMatchPanel(mid) {
   const { matches } = await api('/matches');
   const m = matches.find((x) => x.id === mid);
   if (!m) return toast('Maç bulunamadı', true);
   const k = fmtKick(m.commence_time);
+  // Rapor varsa Saha Raporu; yoksa 1 gün kala otomatik önizleme.
+  const kt = new Date(m.commence_time).getTime();
+  let previewHtml = '';
+  if (kt > Date.now()) {
+    try {
+      const p = await api(`/matches/${mid}/preview`);
+      if (p.report) previewHtml = sahaReportHtml(p.report, m);
+      else if (kt - Date.now() <= 86400000) previewHtml = matchPreviewHtml(p);
+    } catch (_) {}
+  }
   $('#match-content').innerHTML = `
     <div class="panel-head">
       <div class="teams-col">
@@ -822,6 +944,7 @@ async function openMatchPanel(mid) {
       </div>
       <div class="kick"><b>${k.day}</b>${k.time}</div>
     </div>
+    ${previewHtml}
     ${marketsHtml(m)}`;
   $$('#match-content .mgroup-head').forEach((h) =>
     h.addEventListener('click', () => h.parentElement.classList.toggle('open'))

@@ -400,11 +400,79 @@ function marketsHtml(m) {
 }
 
 // Maca tiklayinca acilan (asagidan kayan) oran paneli
+// Maç 1 günden yakınsa gösterilen otomatik önizleme raporu (oran + puan durumu).
+function fmtForm(f) {
+  if (!f) return '<small style="color:var(--muted)">form yok</small>';
+  const map = { W: ['G', 'ok'], D: ['B', 'draw'], L: ['M', 'no'] };
+  const arr = f.split(/[^WDL]/i).filter(Boolean).map((c) => c.toUpperCase());
+  return arr.map((ch) => { const [lab, cls] = map[ch] || ['?', '']; return `<span class="fdot ${cls}">${lab}</span>`; }).join('') || '<small style="color:var(--muted)">form yok</small>';
+}
+function teamStand(name, t) {
+  if (!t) return `<div class="ts"><div class="ts-name">${name}</div><div class="ts-meta" style="color:var(--muted)">puan durumu yok</div></div>`;
+  return `<div class="ts"><div class="ts-name">${name}</div>
+    <div class="ts-meta"><b>${t.pos}.</b> sıra · <b>${t.points}</b> puan</div>
+    <div class="ts-form">${fmtForm(t.form)}</div></div>`;
+}
+function matchPreviewHtml(p) {
+  if (!p) return '';
+  const pr = p.probs, ou = p.ou, kg = p.kg;
+  const bar = pr ? `<div class="prev-bar"><i class="s1" style="width:${pr['1']}%"></i><i class="sx" style="width:${pr.X}%"></i><i class="s2" style="width:${pr['2']}%"></i></div>
+    <div class="prev-legend"><span>1 <b>%${pr['1']}</b></span><span>X <b>%${pr.X}</b></span><span>2 <b>%${pr['2']}</b></span></div>` : '';
+  const sc = (p.scores && p.scores.length) ? `<div class="prev-row"><span class="prev-k">En olası skorlar</span><span class="prev-v">${p.scores.map((s) => `${s.score} <small>%${s.prob}</small>`).join(' · ')}</span></div>` : '';
+  const ouRow = ou ? `<div class="prev-row"><span class="prev-k">2.5 Gol</span><span class="prev-v">Üst %${ou.over} · Alt %${ou.under}</span></div>` : '';
+  const kgRow = kg ? `<div class="prev-row"><span class="prev-k">Karşılıklı Gol</span><span class="prev-v">Var %${kg.yes} · Yok %${kg.no}</span></div>` : '';
+  const stand = (p.home || p.away) ? `<div class="prev-stand">${teamStand(p.home_team, p.home)}${teamStand(p.away_team, p.away)}</div>` : '';
+  return `<div class="preview-card">
+    <div class="prev-title">📊 Maç Önizlemesi</div>
+    ${bar}${sc}${ouRow}${kgRow}${stand}
+    <div class="prev-note">Oranlar ve güncel puan durumundan otomatik üretildi · G: galibiyet, B: beraberlik, M: mağlubiyet</div>
+  </div>`;
+}
+
+// PDF tarzi "Saha Raporu" (koyu/altin) — zamanlanmis gorevin urettigi raporu gosterir.
+function srRows(rows) {
+  return (rows || []).map(([k, v]) =>
+    `<div class="sr-row"><span class="sr-k">${k}</span><span class="sr-v">${v != null && v !== '' ? v : '<i>veri yok</i>'}</span></div>`).join('');
+}
+function srGauge(g) {
+  const p = Math.max(0, Math.min(100, Math.round(Number(g.pct) || 0)));
+  return `<div class="sr-gauge" style="--p:${p}"><div class="sr-ginner"><div class="sr-gnum">%${p}</div><div class="sr-glbl">${g.label || ''}</div></div></div>`;
+}
+function sahaReportHtml(r, m) {
+  if (!r) return '';
+  const meta = r.meta || {};
+  const metaLine = [meta.league, meta.week, meta.date, meta.stadium].filter(Boolean).join(' · ');
+  const S = (t) => `<div class="sr-sec">${t}</div>`;
+  return `<div class="saha">
+    <div class="sr-title">SAHA RAPORU</div>
+    ${metaLine ? `<div class="sr-meta">${metaLine}</div>` : ''}
+    <div class="sr-teams"><span class="sr-tn">${m.home_team}</span><span class="sr-vs">VS</span><span class="sr-tn sr-right">${m.away_team}</span></div>
+    ${r.intro ? `<p class="sr-p">${r.intro}</p>` : ''}
+    ${r.data && r.data.length ? S('MAÇ VERİLERİ') + srRows(r.data) : ''}
+    ${r.gauges && r.gauges.length ? `<div class="sr-gauges">${r.gauges.map(srGauge).join('')}</div>` : ''}
+    ${r.conclusion ? `<div class="sr-concl"><div class="sr-cl">RAPORUN SONUCU</div><div class="sr-ct">${r.conclusion.title || ''}</div>${r.conclusion.note ? `<div class="sr-cn">${r.conclusion.note}</div>` : ''}</div>` : ''}
+    ${r.h2h && r.h2h.length ? S('SON KARŞILAŞMALAR') + `<div class="sr-h2h">${r.h2h.map((x) => `<div class="sr-h2h-i"><b>${x.res || ''}</b><span>${x.when || ''}</span></div>`).join('')}</div>` + (r.h2h_note ? `<div class="sr-note">${r.h2h_note}</div>` : '') : ''}
+    ${r.extras && r.extras.length ? S('EK VERİLER') + srRows(r.extras) : ''}
+    ${r.why ? S('NEDEN BU SONUÇ?') + `<p class="sr-p">${r.why}</p>` : ''}
+    ${r.footer ? `<div class="sr-foot">${r.footer}</div>` : ''}
+  </div>`;
+}
+
 async function openMatchPanel(mid) {
   const { matches } = await api('/matches');
   const m = matches.find((x) => x.id === mid);
   if (!m) return toast('Maç bulunamadı', true);
   const k = fmtKick(m.commence_time);
+  // Rapor varsa Saha Raporu; yoksa 1 gün kala otomatik önizleme.
+  const kt = new Date(m.commence_time).getTime();
+  let previewHtml = '';
+  if (kt > Date.now()) {
+    try {
+      const p = await api(`/matches/${mid}/preview`);
+      if (p.report) previewHtml = sahaReportHtml(p.report, m);
+      else if (kt - Date.now() <= 86400000) previewHtml = matchPreviewHtml(p);
+    } catch (_) {}
+  }
   $('#match-content').innerHTML = `
     <div class="panel-head">
       <div class="teams-col">
@@ -413,6 +481,7 @@ async function openMatchPanel(mid) {
       </div>
       <div class="kick"><b>${k.day}</b>${k.time}</div>
     </div>
+    ${previewHtml}
     ${marketsHtml(m)}`;
   $$('#match-content .mgroup-head').forEach((h) =>
     h.addEventListener('click', () => h.parentElement.classList.toggle('open'))
