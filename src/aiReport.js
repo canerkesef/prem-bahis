@@ -214,14 +214,36 @@ async function understatLeague(season) {
       for (const p of players) {
         const tt = normName(p.team_title || '');
         if (!tt || !p.player_name) continue;
-        (byTeam[tt] = byTeam[tt] || []).push({ name: p.player_name, mins: Number(p.time || 0) });
+        (byTeam[tt] = byTeam[tt] || []).push({ name: p.player_name, mins: Number(p.time || 0), pos: p.position || '' });
       }
       for (const tt in byTeam) {
-        rosters[tt] = byTeam[tt].sort((a, b) => b.mins - a.mins).map((x) => x.name).slice(0, 22);
+        rosters[tt] = byTeam[tt].sort((a, b) => b.mins - a.mins).slice(0, 25);
       }
     }
   }
   return { stats: byName, rosters };
+}
+// Understat pozisyon kodunu G/D/M/F'ye indirger.
+function classifyPos(pos) {
+  const p = String(pos || '').toUpperCase().replace(/\s+/g, ''); // "D M C" -> "DMC"
+  if (/GK/.test(p)) return 'G';
+  if (/^F|FW/.test(p)) return 'F';           // FW, FWL, FWR
+  if (/AM|DM|^M/.test(p)) return 'M';        // AMC/AMR/DMC/MC vb. orta saha
+  if (/^D/.test(p)) return 'D';              // DC, DR, DL
+  return 'M';
+}
+// Bu sezon en cok oynayanlardan GUNCEL muhtemel 11 kurar (kaleci + 10 saha oyuncusu).
+function buildXI(roster) {
+  if (!Array.isArray(roster) || roster.length < 11) return null;
+  const sorted = [...roster].sort((a, b) => b.mins - a.mins);
+  const gk = sorted.find((x) => classifyPos(x.pos) === 'G');
+  if (!gk) return null;
+  const out = sorted.filter((x) => x !== gk).slice(0, 10);
+  if (out.length < 10) return null;
+  const D = [], M = [], F = [];
+  for (const x of out) { const c = classifyPos(x.pos); (c === 'D' ? D : c === 'F' ? F : M).push(x.name); }
+  const formation = `${D.length}-${M.length}-${F.length}`;
+  return { formation, players: [gk.name, ...D, ...M, ...F] };
 }
 async function understatXG(match) {
   const hn = normName(match.home_team), an = normName(match.away_team);
@@ -246,10 +268,15 @@ async function understatXG(match) {
     if (thin(a) && pa) a = pa;
     if (ph || pa) period = `${cur - 1}-${String(cur).slice(2)} baz`;
   }
-  // Kadro (bu sezon oynayanlar) — muhtemel 11'i buradan secmek transferli oyuncuyu eler.
-  const rosterHome = find(curRosters, hn) || null;
-  const rosterAway = find(curRosters, an) || null;
-  if (!h && !a) return { rosterHome, rosterAway };
+  // Kadro (bu sezon oynayanlar; {name,mins,pos}) — GUNCEL muhtemel 11'i buradan kurariz.
+  const rosterHomeObj = find(curRosters, hn) || null;
+  const rosterAwayObj = find(curRosters, an) || null;
+  const names = (r) => (Array.isArray(r) ? r.map((x) => x.name) : null);
+  const rosterHome = names(rosterHomeObj);
+  const rosterAway = names(rosterAwayObj);
+  const xiHome = buildXI(rosterHomeObj);
+  const xiAway = buildXI(rosterAwayObj);
+  if (!h && !a) return { rosterHome, rosterAway, xiHome, xiAway };
   const f = (x) => (x && x.xgPer != null ? x.xgPer.toFixed(2) : 'veri yok');
   const fa = (x) => (x && x.xgaPer != null ? x.xgaPer.toFixed(2) : 'veri yok');
   // Son maclar (Understat yalnizca LIG maclarini tutar), en eski -> en yeni.
@@ -264,7 +291,7 @@ async function understatXG(match) {
     xga: `${fa(h)} — ${fa(a)} (${period})`,
     formHome: formOf(h),
     formAway: formOf(a),
-    rosterHome, rosterAway,
+    rosterHome, rosterAway, xiHome, xiAway,
   };
 }
 
@@ -273,7 +300,7 @@ function withTimeout(p, ms) {
   return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
 }
 async function gatherFacts(match) {
-  const facts = { referee: null, stadium: null, injuries: null, h2h: [], h2h_note: null, xg: null, xga: null, formHome: null, formAway: null, rosterHome: null, rosterAway: null };
+  const facts = { referee: null, stadium: null, injuries: null, h2h: [], h2h_note: null, xg: null, xga: null, formHome: null, formAway: null, rosterHome: null, rosterAway: null, xiHome: null, xiAway: null };
   const [fd, af, us] = await Promise.all([
     withTimeout(fdFacts(match), 12000).catch(() => null),      // football-data (guncel sezon)
     withTimeout(fetchFacts(match), 12000).catch(() => null),   // API-Football (yedek H2H/sakat)
@@ -300,6 +327,8 @@ async function gatherFacts(match) {
     if (!facts.formAway && us.formAway) facts.formAway = us.formAway;
     facts.rosterHome = us.rosterHome || null;
     facts.rosterAway = us.rosterAway || null;
+    facts.xiHome = us.xiHome || null;
+    facts.xiAway = us.xiAway || null;
   }
   return facts;
 }
@@ -541,23 +570,28 @@ async function generateReportFor(match) {
   if (facts.formHome || facts.formAway) {
     report.form = { homeTeam: match.home_team, awayTeam: match.away_team, home: facts.formHome || [], away: facts.formAway || [] };
   }
-  // Muhtemel 11'i temizle: sadece gecerli isim dizileri, en fazla 11; ikisi de bossa kaldir.
-  if (report.lineups && typeof report.lineups === 'object') {
-    const clean11 = (arr) => (Array.isArray(arr) ? arr : [])
-      .map((x) => String(x || '').trim())
-      .filter((x) => x && !isEmptyVal(x))
-      .slice(0, 11);
-    const home = clean11(report.lineups.home);
-    const away = clean11(report.lineups.away);
-    if (home.length || away.length) {
-      report.lineups = {
-        homeTeam: match.home_team, awayTeam: match.away_team,
-        homeFormation: report.lineups.homeFormation && !isEmptyVal(report.lineups.homeFormation) ? String(report.lineups.homeFormation).trim() : null,
-        awayFormation: report.lineups.awayFormation && !isEmptyVal(report.lineups.awayFormation) ? String(report.lineups.awayFormation).trim() : null,
-        home, away,
-      };
-    } else { delete report.lineups; }
-  }
+  // Muhtemel 11: ONCELIK Understat'tan kurulan GUNCEL XI (transferli/eski oyuncu giremez).
+  // Understat yoksa Gemini'nin verdigi 11 (temizlenmis) yedek olarak kullanilir.
+  const clean11 = (arr) => (Array.isArray(arr) ? arr : [])
+    .map((x) => String(x || '').trim()).filter((x) => x && !isEmptyVal(x)).slice(0, 11);
+  const cleanForm = (f) => {
+    if (!f || isEmptyVal(f)) return null;
+    const s = String(f).replace(/\|.*/,'').replace(/null/ig, '').trim(); // "4-3-3 | null" -> "4-3-3"
+    return /^\d+(-\d+)+$/.test(s) ? s : null;
+  };
+  const gl = (report.lineups && typeof report.lineups === 'object') ? report.lineups : {};
+  const homeXi = facts.xiHome && facts.xiHome.players ? facts.xiHome.players : clean11(gl.home);
+  const awayXi = facts.xiAway && facts.xiAway.players ? facts.xiAway.players : clean11(gl.away);
+  const homeForm = (facts.xiHome && facts.xiHome.formation) || cleanForm(gl.homeFormation);
+  const awayForm = (facts.xiAway && facts.xiAway.formation) || cleanForm(gl.awayFormation);
+  if (homeXi.length || awayXi.length) {
+    report.lineups = {
+      homeTeam: match.home_team, awayTeam: match.away_team,
+      homeFormation: homeForm || null, awayFormation: awayForm || null,
+      home: homeXi, away: awayXi,
+      src: (facts.xiHome || facts.xiAway) ? 'understat' : 'ai',
+    };
+  } else { delete report.lineups; }
   // Bos ("veri yok") satirlari hic gosterme.
   report.data = stripEmpty(report.data);
   report.extras = stripEmpty(report.extras);
