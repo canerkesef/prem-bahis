@@ -295,16 +295,99 @@ async function understatXG(match) {
   };
 }
 
+// ---------- Fantasy Premier League (RESMI, UCRETSIZ): guncel kadro + sakat/cezali ----------
+// Tek istek tum takim ve oyuncularin GUNCEL durumunu verir (transfer/sakat dahil).
+let FPL_CACHE = { at: 0, teams: null };
+function clubKey(name) {
+  let s = normName(name).replace(/\s+(fc|afc)$/,'').trim();
+  const alias = {
+    'manchester city': 'mancity', 'man city': 'mancity',
+    'manchester united': 'manutd', 'man utd': 'manutd', 'man united': 'manutd',
+    'tottenham hotspur': 'spurs', 'tottenham': 'spurs', spurs: 'spurs',
+    'nottingham forest': 'nottforest', "nott'm forest": 'nottforest', 'nottm forest': 'nottforest',
+    'wolverhampton wanderers': 'wolves', wolverhampton: 'wolves', wolves: 'wolves',
+    'newcastle united': 'newcastle', newcastle: 'newcastle',
+    'west ham united': 'westham', 'west ham': 'westham',
+    'brighton and hove albion': 'brighton', 'brighton & hove albion': 'brighton', brighton: 'brighton',
+    'afc bournemouth': 'bournemouth', bournemouth: 'bournemouth',
+    'leicester city': 'leicester', leicester: 'leicester',
+    'ipswich town': 'ipswich', ipswich: 'ipswich',
+    'leeds united': 'leeds', leeds: 'leeds',
+  };
+  if (alias[s]) return alias[s];
+  return s.replace(/[^a-z0-9]/g, '');
+}
+async function fplData() {
+  const now = Date.now();
+  if (FPL_CACHE.teams && now - FPL_CACHE.at < 30 * 60 * 1000) return FPL_CACHE.teams;
+  try {
+    const res = await fetch('https://fantasy.premierleague.com/api/bootstrap-static/', { headers: { 'user-agent': 'Mozilla/5.0' } });
+    if (!res.ok) return null;
+    const j = await res.json();
+    const teamById = {};
+    const out = {};
+    for (const t of j.teams || []) { teamById[t.id] = t; out[clubKey(t.name)] = { name: t.name, short: t.short_name, players: [] }; }
+    const posMap = { 1: 'G', 2: 'D', 3: 'M', 4: 'F' };
+    for (const e of j.elements || []) {
+      const t = teamById[e.team]; if (!t) continue;
+      const pos = posMap[e.element_type]; if (!pos) continue; // menajer vb. atla
+      const k = clubKey(t.name); if (!out[k]) continue;
+      out[k].players.push({
+        name: e.web_name, pos, mins: Number(e.minutes || 0), starts: Number(e.starts || 0),
+        status: e.status || 'a', news: e.news || '',
+      });
+    }
+    FPL_CACHE = { at: now, teams: out };
+    return out;
+  } catch (_) { return null; }
+}
+function fplFind(fpl, teamName) {
+  if (!fpl) return null;
+  const k = clubKey(teamName);
+  if (fpl[k]) return fpl[k];
+  const e = Object.entries(fpl).find(([kk]) => kk.includes(k.slice(0, 5)) || k.includes(kk.slice(0, 5)));
+  return e ? e[1] : null;
+}
+// Guncel muhtemel 11 (sakat/cezali/ayrilan HARIC), en cok oynayanlardan.
+function fplXI(team) {
+  if (!team || !Array.isArray(team.players)) return null;
+  const playable = team.players.filter((p) => p.status === 'a' || p.status === 'd');
+  const gk = playable.filter((p) => p.pos === 'G').sort((a, b) => (b.starts - a.starts) || (b.mins - a.mins))[0];
+  if (!gk) return null;
+  const out = playable.filter((p) => p !== gk && p.pos !== 'G')
+    .sort((a, b) => (b.mins - a.mins) || (b.starts - a.starts)).slice(0, 10);
+  if (out.length < 10) return null;
+  const D = [], M = [], F = [];
+  for (const p of out) { (p.pos === 'D' ? D : p.pos === 'F' ? F : M).push(p.name); }
+  return { formation: `${D.length}-${M.length}-${F.length}`, players: [gk.name, ...D, ...M, ...F] };
+}
+// Guncel eksik listesi (sakat/cezali/supheli) — resmi status'ten.
+function fplInjuries(team) {
+  if (!team || !Array.isArray(team.players)) return null;
+  const lbl = (p) => {
+    if (p.status === 's') return 'cezalı';
+    if (p.status === 'i') return 'sakat';
+    if (p.status === 'd') return 'şüpheli';
+    return null;
+  };
+  const list = team.players
+    .filter((p) => ['i', 's', 'd'].includes(p.status))
+    .sort((a, b) => b.mins - a.mins).slice(0, 6)
+    .map((p) => { const l = lbl(p); return l ? `${p.name} (${l})` : p.name; });
+  return list.length ? list : null;
+}
+
 // ---------- COK KAYNAKLI birlestirici (tek siteye bagimli degil) ----------
 function withTimeout(p, ms) {
   return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
 }
 async function gatherFacts(match) {
   const facts = { referee: null, stadium: null, injuries: null, h2h: [], h2h_note: null, xg: null, xga: null, formHome: null, formAway: null, rosterHome: null, rosterAway: null, xiHome: null, xiAway: null };
-  const [fd, af, us] = await Promise.all([
+  const [fd, af, us, fpl] = await Promise.all([
     withTimeout(fdFacts(match), 12000).catch(() => null),      // football-data (guncel sezon)
     withTimeout(fetchFacts(match), 12000).catch(() => null),   // API-Football (yedek H2H/sakat)
-    withTimeout(understatXG(match), 12000).catch(() => null),  // Understat (xG)
+    withTimeout(understatXG(match), 12000).catch(() => null),  // Understat (xG + form)
+    withTimeout(fplData(), 12000).catch(() => null),           // FPL (guncel kadro + sakat)
   ]);
   // Oncelik: football-data (guncel, tum turnuvalar) > API-Football (gecmis)
   if (fd) {
@@ -327,8 +410,15 @@ async function gatherFacts(match) {
     if (!facts.formAway && us.formAway) facts.formAway = us.formAway;
     facts.rosterHome = us.rosterHome || null;
     facts.rosterAway = us.rosterAway || null;
-    facts.xiHome = us.xiHome || null;
-    facts.xiAway = us.xiAway || null;
+  }
+  // FPL (RESMI, GUNCEL): muhtemel 11 ve eksik listesi buradan — transferli/eski oyuncu giremez.
+  if (fpl) {
+    const fh = fplFind(fpl, match.home_team), fa = fplFind(fpl, match.away_team);
+    const xh = fplXI(fh), xa = fplXI(fa);
+    if (xh) facts.xiHome = xh;
+    if (xa) facts.xiAway = xa;
+    const injH = fplInjuries(fh), injA = fplInjuries(fa);
+    if (injH || injA) facts.injuries = `${injH ? injH.join(', ') : 'yok'} — ${injA ? injA.join(', ') : 'yok'}`;
   }
   return facts;
 }
@@ -589,7 +679,7 @@ async function generateReportFor(match) {
       homeTeam: match.home_team, awayTeam: match.away_team,
       homeFormation: homeForm || null, awayFormation: awayForm || null,
       home: homeXi, away: awayXi,
-      src: (facts.xiHome || facts.xiAway) ? 'understat' : 'ai',
+      src: (facts.xiHome || facts.xiAway) ? 'fpl' : 'ai',
     };
   } else { delete report.lineups; }
   // Bos ("veri yok") satirlari hic gosterme.
