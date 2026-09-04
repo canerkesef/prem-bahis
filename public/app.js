@@ -543,12 +543,13 @@ function srXiList(team, formation, players) {
   </div>`;
 }
 // Dizilişe göre oyuncuları SAHA üzerinde konumlandırır (kaleci altta, forvet üstte).
-function srPitch(team, formation, players) {
+function srPitch(team, formation, players, srcTag) {
   const lines = srParseFormation(formation);
   const outfield = lines.reduce((a, b) => a + b, 0);
   const pl = players || [];
   // Diziliş çözülemiyorsa (toplam 10 değil veya 11 oyuncu yok) liste görünümüne düş.
   if (outfield !== 10 || pl.length < 11) return srXiList(team, formation, players);
+  const tag = srcTag === 'ai' ? '<span class="sr-src-tag ai">AI tahmini</span>' : srcTag === 'fpl' ? '<span class="sr-src-tag ok">güncel</span>' : '';
   const rows = [[pl[0]]]; let idx = 1;
   for (const k of lines) { rows.push(pl.slice(idx, idx + k)); idx += k; }
   const n = rows.length;
@@ -567,18 +568,20 @@ function srPitch(team, formation, players) {
     + '<rect x="28" y="1" width="44" height="20" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="0.6"/>'
     + '<rect x="28" y="129" width="44" height="20" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="0.6"/></svg>';
   return `<div class="sr-pitch-col">
-    <div class="sr-xi-team">${team || ''}${formation ? ` <span class="sr-xi-form">${formation}</span>` : ''}</div>
+    <div class="sr-xi-team">${team || ''}${formation ? ` <span class="sr-xi-form">${formation}</span>` : ''}${tag}</div>
     <div class="sr-pitch">${svg}${chips}</div>
   </div>`;
 }
 function srLineups(l) {
   if (!l || (!(l.home && l.home.length) && !(l.away && l.away.length))) return '';
+  const hs = l.homeSrc || (l.src === 'ai' ? 'ai' : 'fpl');
+  const as = l.awaySrc || (l.src === 'ai' ? 'ai' : 'fpl');
   return `<div class="sr-sec">MUHTEMEL İLK 11 <span class="sr-xi-tag">kesin değil</span></div>
     <div class="sr-xi">
-      ${srPitch(l.homeTeam, l.homeFormation, l.home)}
-      ${srPitch(l.awayTeam, l.awayFormation, l.away)}
+      ${srPitch(l.homeTeam, l.homeFormation, l.home, hs)}
+      ${srPitch(l.awayTeam, l.awayFormation, l.away, as)}
     </div>
-    <div class="sr-note">${(l.src === 'fpl' || l.src === 'understat') ? 'Güncel kadrodan (bu sezon en çok oynayanlar) kuruldu. ' : ''}Tahmini kadrodur; kesin 11 maçtan ~1 saat önce belli olur.</div>`;
+    <div class="sr-note">Resmi FPL kadrosundan (bu sezon en çok oynayanlar) kuruldu. Tahmini kadrodur; kesin 11 maçtan ~1 saat önce belli olur.</div>`;
 }
 function sahaReportHtml(r, m) {
   if (!r) return '';
@@ -597,7 +600,7 @@ function sahaReportHtml(r, m) {
     ${srClean(r.extras).length ? S('EK VERİLER') + srRows(r.extras) : ''}
     ${r.why ? S('NEDEN BU SONUÇ?') + `<p class="sr-p">${r.why}</p>` : ''}
     ${r.lineups ? srLineups(r.lineups) : ''}
-    ${r.footer ? `<div class="sr-foot">${r.footer}</div>` : ''}
+    ${r.footer ? `<div class="sr-foot">${r.footer}${r.gen && r.gen.at ? ` · üretim: ${String(r.gen.by || '')} ${new Date(r.gen.at).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: TZ })}` : ''}</div>` : ''}
   </div>`;
 }
 

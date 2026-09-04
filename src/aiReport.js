@@ -471,6 +471,20 @@ async function apiFootballDiag(match) {
     catch (e) { out.footballData = { error: String(e.message || e) }; }
     try { const us = await understatXG(match); out.understat = us || 'bulunamadi'; }
     catch (e) { out.understat = { error: String(e.message || e) }; }
+    // FPL: takimlar eslesti mi, guncel 11 kurulabildi mi?
+    try {
+      const fpl = await fplData();
+      if (!fpl) { out.fpl = { error: 'FPL erisilemedi/bos' }; }
+      else {
+        const fh = fplFind(fpl, match.home_team), fa = fplFind(fpl, match.away_team);
+        const xh = fplXI(fh), xa = fplXI(fa);
+        out.fpl = {
+          teamsLoaded: Object.keys(fpl).length,
+          home: { matched: !!fh, name: fh && fh.name, players: fh ? fh.players.length : 0, xi: xh ? xh.players : null },
+          away: { matched: !!fa, name: fa && fa.name, players: fa ? fa.players.length : 0, xi: xa ? xa.players : null },
+        };
+      }
+    } catch (e) { out.fpl = { error: String(e.message || e) }; }
   }
   return out;
 }
@@ -616,10 +630,7 @@ HAZIR GERÇEKLER (kaynaklardan çekildi — DEĞİŞTİRME, olduğu gibi kullan)
 5) Hakem: bu maça atanan hakem açıklandıysa yaz.
 6) PPDA veya pres yoğunluğu (baskı): ${seasonStr} yoksa ${prevStr} değerini kullan, kaynağı ima et.
 7) Güncel form ve lig sırası bilgisini "intro" ve "why" içinde kullan.
-8) MUHTEMEL İLK 11: iki takımın bu maç için TAHMİNİ/muhtemel ilk 11'ini ver. Her takım için 11 oyuncu adı ve varsa diziliş (ör. 4-3-3). BULAMAZSAN ilgili takım için BOŞ dizi [] koy. Bu MUHTEMEL kadrodur; kesin değil.
-   ÇOK ÖNEMLİ — TRANSFER/GÜNCEL KADRO: Aşağıda her takımın BU SEZON (${seasonStr}) gerçekten oynayan oyuncu listesi verildi. Muhtemel 11'i SADECE bu listelerden seç. Listede olmayan bir oyuncuyu ASLA yazma (başka takıma transfer olmuş olabilir). Liste boşsa, en son ${seasonStr} maç kadrosunu ara ve SADECE şu an o takımda olan oyuncuları yaz; transfer olup ayrılan oyuncuyu ekleme. Eski sezon bilgine güvenme, güncel kadroyu doğrula.
-   EV (${match.home_team}) bu sezon oynayanlar: ${(facts.rosterHome && facts.rosterHome.length) ? facts.rosterHome.join(', ') : 'liste yok — aramayla güncel kadroyu doğrula'}
-   DEP (${match.away_team}) bu sezon oynayanlar: ${(facts.rosterAway && facts.rosterAway.length) ? facts.rosterAway.join(', ') : 'liste yok — aramayla güncel kadroyu doğrula'}
+(Not: Muhtemel 11 ve eksik oyuncu listesi AYRI bir resmi kaynaktan alınıyor; sen kadro/11 YAZMA.)
 
 KURALLAR: Sadece gerçekten aradıktan sonra hiçbir şey bulamazsan o değeri "veri yok" yaz (kadroda boş dizi). Tahmini bir aralık, geçen sezon ortalaması gibi GERÇEK bir veri her zaman "veri yok"dan iyidir. Ama ASLA uydurma/rastgele sayı ya da oyuncu adı verme; verdiğin her şey aranan gerçek bir kaynaktan olmalı. Oyuncu adlarında güncel kadroya sadık kal — transfer olup ayrılmış oyuncuyu eski takımına YAZMA.
 
@@ -633,7 +644,6 @@ SADECE şu JSON'u döndür (başka metin, markdown, açıklama YOK):
 "h2h_note":"1 cümle | null",
 "extras":[["Hakem",${JSON.stringify(facts.referee || '<hakem>')}],["Baskı (PPDA)","<ev> — <dep> (dönem)"]],
 "why":"2-3 cümle, oranlar + xG + form birlikte",
-"lineups":{"homeFormation":"<diziliş> | null","awayFormation":"<diziliş> | null","home":["<11 gerçek oyuncu adı> veya boş []"],"away":["<11 gerçek oyuncu adı> veya boş []"]},
 "footer":"Bu rapor istatistiksel analiz içerir; kesin sonuç garantisi vermez."}`;
 }
 
@@ -665,28 +675,23 @@ async function generateReportFor(match) {
   if (facts.formHome || facts.formAway) {
     report.form = { homeTeam: match.home_team, awayTeam: match.away_team, home: facts.formHome || [], away: facts.formAway || [] };
   }
-  // Muhtemel 11: ONCELIK Understat'tan kurulan GUNCEL XI (transferli/eski oyuncu giremez).
-  // Understat yoksa Gemini'nin verdigi 11 (temizlenmis) yedek olarak kullanilir.
-  const clean11 = (arr) => (Array.isArray(arr) ? arr : [])
-    .map((x) => String(x || '').trim()).filter((x) => x && !isEmptyVal(x)).slice(0, 11);
-  const cleanForm = (f) => {
-    if (!f || isEmptyVal(f)) return null;
-    const s = String(f).replace(/\|.*/,'').replace(/null/ig, '').trim(); // "4-3-3 | null" -> "4-3-3"
-    return /^\d+(-\d+)+$/.test(s) ? s : null;
-  };
-  const gl = (report.lineups && typeof report.lineups === 'object') ? report.lineups : {};
-  const homeXi = facts.xiHome && facts.xiHome.players ? facts.xiHome.players : clean11(gl.home);
-  const awayXi = facts.xiAway && facts.xiAway.players ? facts.xiAway.players : clean11(gl.away);
-  const homeForm = (facts.xiHome && facts.xiHome.formation) || cleanForm(gl.homeFormation);
-  const awayForm = (facts.xiAway && facts.xiAway.formation) || cleanForm(gl.awayFormation);
+  // Muhtemel 11: YALNIZCA FPL'den (resmi, guncel kadro). Gemini'nin kadro yazma yolu
+  // KALDIRILDI — bir daha eski/yanlis isim gosterilmesin. FPL veremezse o takim "veri yok".
+  const homeXi = (facts.xiHome && facts.xiHome.players) ? facts.xiHome.players : [];
+  const awayXi = (facts.xiAway && facts.xiAway.players) ? facts.xiAway.players : [];
   if (homeXi.length || awayXi.length) {
     report.lineups = {
       homeTeam: match.home_team, awayTeam: match.away_team,
-      homeFormation: homeForm || null, awayFormation: awayForm || null,
+      homeFormation: (facts.xiHome && facts.xiHome.formation) || null,
+      awayFormation: (facts.xiAway && facts.xiAway.formation) || null,
       home: homeXi, away: awayXi,
-      src: (facts.xiHome || facts.xiAway) ? 'fpl' : 'ai',
+      homeSrc: facts.xiHome ? 'fpl' : 'none',
+      awaySrc: facts.xiAway ? 'fpl' : 'none',
+      src: 'fpl',
     };
   } else { delete report.lineups; }
+  // Surum damgasi: hangi kodun urettigini bilmek icin (eski rapor karisikligini onler).
+  report.gen = { by: 'fpl-xi-v1', at: new Date().toISOString() };
   // Bos ("veri yok") satirlari hic gosterme.
   report.data = stripEmpty(report.data);
   report.extras = stripEmpty(report.extras);
