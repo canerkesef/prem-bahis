@@ -201,7 +201,27 @@ async function understatLeague(season) {
     const xga = hist.reduce((s, h) => s + Number(h.xGA || 0), 0);
     byName[normName(t.title)] = { gp, xgPer: gp ? xg / gp : null, xgaPer: gp ? xga / gp : null, hist };
   }
-  return byName;
+  // Kadro (bu sezon oynayan oyuncular) — playersData'dan; takim -> en cok oynayan isimler.
+  const rosters = {};
+  const pm = html.match(/playersData\s*=\s*JSON\.parse\('([^']+)'\)/);
+  if (pm) {
+    const pdec = pm[1]
+      .replace(/\\x([0-9A-Fa-f]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
+      .replace(/\\u([0-9A-Fa-f]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+    let players; try { players = JSON.parse(pdec); } catch (_) { players = null; }
+    if (Array.isArray(players)) {
+      const byTeam = {};
+      for (const p of players) {
+        const tt = normName(p.team_title || '');
+        if (!tt || !p.player_name) continue;
+        (byTeam[tt] = byTeam[tt] || []).push({ name: p.player_name, mins: Number(p.time || 0) });
+      }
+      for (const tt in byTeam) {
+        rosters[tt] = byTeam[tt].sort((a, b) => b.mins - a.mins).map((x) => x.name).slice(0, 22);
+      }
+    }
+  }
+  return { stats: byName, rosters };
 }
 async function understatXG(match) {
   const hn = normName(match.home_team), an = normName(match.away_team);
@@ -212,18 +232,24 @@ async function understatXG(match) {
     const e = Object.entries(tbl).find(([k]) => k.includes(n.slice(0, 5)) || n.includes(k.slice(0, 5)));
     return e ? e[1] : null;
   };
-  let curTbl = null; try { curTbl = await understatLeague(cur); } catch (_) {}
+  let cur1 = null; try { cur1 = await understatLeague(cur); } catch (_) {}
+  const curTbl = cur1 && cur1.stats ? cur1.stats : null;
+  const curRosters = cur1 && cur1.rosters ? cur1.rosters : null;
   let h = find(curTbl, hn), a = find(curTbl, an);
   let period = `${cur}-${String(cur + 1).slice(2)}`;
   const thin = (x) => !x || !x.gp || x.gp < 3;
   if (thin(h) || thin(a)) {
-    let prevTbl = null; try { prevTbl = await understatLeague(cur - 1); } catch (_) {}
+    let prev1 = null; try { prev1 = await understatLeague(cur - 1); } catch (_) {}
+    const prevTbl = prev1 && prev1.stats ? prev1.stats : null;
     const ph = find(prevTbl, hn), pa = find(prevTbl, an);
     if (thin(h) && ph) h = ph;
     if (thin(a) && pa) a = pa;
     if (ph || pa) period = `${cur - 1}-${String(cur).slice(2)} baz`;
   }
-  if (!h && !a) return null;
+  // Kadro (bu sezon oynayanlar) — muhtemel 11'i buradan secmek transferli oyuncuyu eler.
+  const rosterHome = find(curRosters, hn) || null;
+  const rosterAway = find(curRosters, an) || null;
+  if (!h && !a) return { rosterHome, rosterAway };
   const f = (x) => (x && x.xgPer != null ? x.xgPer.toFixed(2) : 'veri yok');
   const fa = (x) => (x && x.xgaPer != null ? x.xgaPer.toFixed(2) : 'veri yok');
   // Son maclar (Understat yalnizca LIG maclarini tutar), en eski -> en yeni.
@@ -238,6 +264,7 @@ async function understatXG(match) {
     xga: `${fa(h)} — ${fa(a)} (${period})`,
     formHome: formOf(h),
     formAway: formOf(a),
+    rosterHome, rosterAway,
   };
 }
 
@@ -246,7 +273,7 @@ function withTimeout(p, ms) {
   return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
 }
 async function gatherFacts(match) {
-  const facts = { referee: null, stadium: null, injuries: null, h2h: [], h2h_note: null, xg: null, xga: null, formHome: null, formAway: null };
+  const facts = { referee: null, stadium: null, injuries: null, h2h: [], h2h_note: null, xg: null, xga: null, formHome: null, formAway: null, rosterHome: null, rosterAway: null };
   const [fd, af, us] = await Promise.all([
     withTimeout(fdFacts(match), 12000).catch(() => null),      // football-data (guncel sezon)
     withTimeout(fetchFacts(match), 12000).catch(() => null),   // API-Football (yedek H2H/sakat)
@@ -271,6 +298,8 @@ async function gatherFacts(match) {
     // Understat yalnizca lig; football-data'dan form gelmediyse yedek olarak kullan.
     if (!facts.formHome && us.formHome) facts.formHome = us.formHome;
     if (!facts.formAway && us.formAway) facts.formAway = us.formAway;
+    facts.rosterHome = us.rosterHome || null;
+    facts.rosterAway = us.rosterAway || null;
   }
   return facts;
 }
@@ -449,14 +478,17 @@ HAZIR GERÇEKLER (kaynaklardan çekildi — DEĞİŞTİRME, olduğu gibi kullan)
 ÖNEMLİ: Yukarıdaki "HAZIR GERÇEKLER"de dolu olan alanları (hakem, xG, xGA, H2H, eksik) AYNEN kullan, tekrar arama. SADECE "yok" olan alanları GOOGLE ARAMASI ile GERÇEK kaynaklardan tamamla. ÖNCELİKLE sofascore.com'a bak (bu maçın ve iki takımın SofaScore sayfaları; sakat/eksik oyuncu, hakem, pres/PPDA için en iyi kaynak). SofaScore'da bulamazsan sırayla fbref.com, understat, whoscored, transfermarkt, premierleague.com kaynaklarına bak. Aramaları "SofaScore ${match.home_team} ${match.away_team}", "SofaScore ${match.home_team} sakatlıklar", "${match.home_team} ${match.away_team} hakem" gibi yap. Her satırı ELİNDEN GELDİĞİNCE DOLDUR:
 1) xG (maç başı): önce ${seasonStr} sezonu; sezon başıysa/az maç oynanmışsa ${prevStr} sezon ortalamasını kullan ve parantezle belirt. Örn: "1.75 — 1.60 (${prevStr})".
 2) xGA (maç başı): aynı kural.
-3) Eksik/sakat/cezalı oyuncular: iki takım için güncel listeyi ara ve isim ver.
+3) Eksik/sakat/cezalı oyuncular: iki takım için GÜNCEL (bu maç haftasına ait) listeyi ara ve isim ver. SADECE şu an o takımda olan oyuncuları yaz; başka takıma transfer olmuş/ayrılmış oyuncuyu ASLA yazma. Eski sezon bilgine güvenme, güncel sakatlık haberinden doğrula. Emin olamadığın oyuncuyu ekleme; hiçbir güncel sakat bulamazsan "veri yok" yaz.
 4) Son 5 karşılaşma (H2H): yoksa aramayla bul, skorlarıyla özetle.
 5) Hakem: bu maça atanan hakem açıklandıysa yaz.
 6) PPDA veya pres yoğunluğu (baskı): ${seasonStr} yoksa ${prevStr} değerini kullan, kaynağı ima et.
 7) Güncel form ve lig sırası bilgisini "intro" ve "why" içinde kullan.
-8) MUHTEMEL İLK 11: iki takımın bu maç için TAHMİNİ/muhtemel ilk 11'ini ara (SofaScore "predicted lineup", whoscored, sportsgambler, fantasy siteleri). Her takım için 11 oyuncu adı ver ve varsa diziliş (ör. 4-3-3). BULAMAZSAN ilgili takım için BOŞ dizi [] koy. Bu MUHTEMEL bir kadro; kesin değil. ASLA oyuncu adı UYDURMA — yalnızca aramada gördüğün gerçek isimleri yaz.
+8) MUHTEMEL İLK 11: iki takımın bu maç için TAHMİNİ/muhtemel ilk 11'ini ver. Her takım için 11 oyuncu adı ve varsa diziliş (ör. 4-3-3). BULAMAZSAN ilgili takım için BOŞ dizi [] koy. Bu MUHTEMEL kadrodur; kesin değil.
+   ÇOK ÖNEMLİ — TRANSFER/GÜNCEL KADRO: Aşağıda her takımın BU SEZON (${seasonStr}) gerçekten oynayan oyuncu listesi verildi. Muhtemel 11'i SADECE bu listelerden seç. Listede olmayan bir oyuncuyu ASLA yazma (başka takıma transfer olmuş olabilir). Liste boşsa, en son ${seasonStr} maç kadrosunu ara ve SADECE şu an o takımda olan oyuncuları yaz; transfer olup ayrılan oyuncuyu ekleme. Eski sezon bilgine güvenme, güncel kadroyu doğrula.
+   EV (${match.home_team}) bu sezon oynayanlar: ${(facts.rosterHome && facts.rosterHome.length) ? facts.rosterHome.join(', ') : 'liste yok — aramayla güncel kadroyu doğrula'}
+   DEP (${match.away_team}) bu sezon oynayanlar: ${(facts.rosterAway && facts.rosterAway.length) ? facts.rosterAway.join(', ') : 'liste yok — aramayla güncel kadroyu doğrula'}
 
-KURALLAR: Sadece gerçekten aradıktan sonra hiçbir şey bulamazsan o değeri "veri yok" yaz (kadroda boş dizi). Tahmini bir aralık, geçen sezon ortalaması gibi GERÇEK bir veri her zaman "veri yok"dan iyidir. Ama ASLA uydurma/rastgele sayı ya da oyuncu adı verme; verdiğin her şey aranan gerçek bir kaynaktan olmalı.
+KURALLAR: Sadece gerçekten aradıktan sonra hiçbir şey bulamazsan o değeri "veri yok" yaz (kadroda boş dizi). Tahmini bir aralık, geçen sezon ortalaması gibi GERÇEK bir veri her zaman "veri yok"dan iyidir. Ama ASLA uydurma/rastgele sayı ya da oyuncu adı verme; verdiğin her şey aranan gerçek bir kaynaktan olmalı. Oyuncu adlarında güncel kadroya sadık kal — transfer olup ayrılmış oyuncuyu eski takımına YAZMA.
 
 SADECE şu JSON'u döndür (başka metin, markdown, açıklama YOK):
 {"meta":{"league":"Premier Lig","week":null,"date":"${dateStr}","stadium":${JSON.stringify(facts.stadium)}},
