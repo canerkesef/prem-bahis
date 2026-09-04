@@ -304,23 +304,29 @@ async function understatXG(match) {
 // Tek istek tum takim ve oyuncularin GUNCEL durumunu verir (transfer/sakat dahil).
 let FPL_CACHE = { at: 0, teams: null };
 function clubKey(name) {
-  let s = normName(name).replace(/\s+(fc|afc)$/,'').trim();
+  // SADECE harf/rakama indir: boşluk, nokta, kesme, GÖRÜNMEZ karakter (zero-width vb.) hepsi gider.
+  const raw = String(name || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]/g, '');
+  // Hem uygulamanın tam adları hem FPL'nin kısa adları AYNI anahtara eşlenir.
   const alias = {
-    'manchester city': 'mancity', 'man city': 'mancity',
-    'manchester united': 'manutd', 'man utd': 'manutd', 'man united': 'manutd',
-    'tottenham hotspur': 'spurs', 'tottenham': 'spurs', spurs: 'spurs',
-    'nottingham forest': 'nottforest', "nott'm forest": 'nottforest', 'nottm forest': 'nottforest',
-    'wolverhampton wanderers': 'wolves', wolverhampton: 'wolves', wolves: 'wolves',
-    'newcastle united': 'newcastle', newcastle: 'newcastle',
-    'west ham united': 'westham', 'west ham': 'westham',
-    'brighton and hove albion': 'brighton', 'brighton & hove albion': 'brighton', brighton: 'brighton',
-    'afc bournemouth': 'bournemouth', bournemouth: 'bournemouth',
-    'leicester city': 'leicester', leicester: 'leicester',
-    'ipswich town': 'ipswich', ipswich: 'ipswich',
-    'leeds united': 'leeds', leeds: 'leeds',
+    manchestercity: 'mancity', mancity: 'mancity',
+    manchesterunited: 'manutd', manutd: 'manutd', manunited: 'manutd',
+    tottenhamhotspur: 'spurs', tottenham: 'spurs', spurs: 'spurs',
+    nottinghamforest: 'nottforest', nottmforest: 'nottforest', nottforest: 'nottforest',
+    wolverhamptonwanderers: 'wolves', wolverhampton: 'wolves', wolves: 'wolves',
+    newcastleunited: 'newcastle', newcastle: 'newcastle',
+    westhamunited: 'westham', westham: 'westham',
+    brightonandhovealbion: 'brighton', brightonhovealbion: 'brighton', brighton: 'brighton',
+    afcbournemouth: 'bournemouth', bournemouth: 'bournemouth',
+    leicestercity: 'leicester', leicester: 'leicester',
+    ipswichtown: 'ipswich', ipswich: 'ipswich',
+    leedsunited: 'leeds', leeds: 'leeds',
+    coventrycity: 'coventry', coventry: 'coventry',
+    hullcity: 'hull', hull: 'hull',
+    sheffieldunited: 'sheffutd', sheffutd: 'sheffutd', sheffieldutd: 'sheffutd',
+    sheffieldwednesday: 'sheffwed', sheffwed: 'sheffwed',
+    westbromwichalbion: 'westbrom', westbrom: 'westbrom', westbromwich: 'westbrom',
   };
-  if (alias[s]) return alias[s];
-  return s.replace(/[^a-z0-9]/g, '');
+  return alias[raw] || raw;
 }
 async function fplData() {
   const now = Date.now();
@@ -700,7 +706,7 @@ async function generateReportFor(match) {
     };
   } else { delete report.lineups; }
   // Surum damgasi + FPL kendini teshis (eski rapor karisikligini ve eslesme sorununu gosterir).
-  report.gen = { by: 'fpl-xi-v2', at: new Date().toISOString(), fpl: facts.fplDbg || null };
+  report.gen = { by: 'fpl-xi-v3', at: new Date().toISOString(), fpl: facts.fplDbg || null };
   // Bos ("veri yok") satirlari hic gosterme.
   report.data = stripEmpty(report.data);
   report.extras = stripEmpty(report.extras);
