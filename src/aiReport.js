@@ -435,9 +435,18 @@ async function callGemini(prompt) {
 
   // Once aramali dene; HERHANGI bir hatada aramasiza dus (arama araci bazi
   // modellerde/surumlerde beklenmedik hata verebiliyor).
+  // 503/429/asiri yuk gibi GECICI hatalarda kisa beklemeyle 3'e kadar yeniden dene.
+  const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+  const isTransient = (r) => r.status === 503 || r.status === 429 || r.status === 500
+    || /overload|high load|unavailable|try again|rate limit|temporar/i.test(r.txt || '');
   let lastErr = '';
   for (const useSearch of (GEMINI_SEARCH ? [true, false] : [false])) {
-    const r = await genContent(key, ver, model, prompt, useSearch);
+    let r;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      r = await genContent(key, ver, model, prompt, useSearch);
+      if (r.ok || !isTransient(r)) break;
+      await sleep(1500 * (attempt + 1)); // 1.5s -> 3s bekle, sonra tekrar dene
+    }
     if (r.ok) {
       let data; try { data = JSON.parse(r.txt); } catch (_) { data = {}; }
       const parts = (((data.candidates || [])[0] || {}).content || {}).parts || [];
