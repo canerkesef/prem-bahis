@@ -424,6 +424,15 @@ async function gatherFacts(match) {
     if (xa) facts.xiAway = xa;
     const injH = fplInjuries(fh), injA = fplInjuries(fa);
     if (injH || injA) facts.injuries = `${injH ? injH.join(', ') : 'yok'} — ${injA ? injA.join(', ') : 'yok'}`;
+    // Kendini teshis: FPL yuklendi mi, ev/dep eslesti mi, kac oyuncu, 11 kuruldu mu.
+    facts.fplDbg = {
+      loaded: true, teams: Object.keys(fpl).length,
+      hk: clubKey(match.home_team), ak: clubKey(match.away_team),
+      home: fh ? `${fh.name}(${fh.players.length}p,xi:${xh ? 'ok' : 'yok'})` : 'ESLESMEDI',
+      away: fa ? `${fa.name}(${fa.players.length}p,xi:${xa ? 'ok' : 'yok'})` : 'ESLESMEDI',
+    };
+  } else {
+    facts.fplDbg = { loaded: false };
   }
   return facts;
 }
@@ -690,8 +699,8 @@ async function generateReportFor(match) {
       src: 'fpl',
     };
   } else { delete report.lineups; }
-  // Surum damgasi: hangi kodun urettigini bilmek icin (eski rapor karisikligini onler).
-  report.gen = { by: 'fpl-xi-v1', at: new Date().toISOString() };
+  // Surum damgasi + FPL kendini teshis (eski rapor karisikligini ve eslesme sorununu gosterir).
+  report.gen = { by: 'fpl-xi-v2', at: new Date().toISOString(), fpl: facts.fplDbg || null };
   // Bos ("veri yok") satirlari hic gosterme.
   report.data = stripEmpty(report.data);
   report.extras = stripEmpty(report.extras);

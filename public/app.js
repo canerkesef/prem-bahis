@@ -600,7 +600,7 @@ function sahaReportHtml(r, m) {
     ${srClean(r.extras).length ? S('EK VERİLER') + srRows(r.extras) : ''}
     ${r.why ? S('NEDEN BU SONUÇ?') + `<p class="sr-p">${r.why}</p>` : ''}
     ${r.lineups ? srLineups(r.lineups) : ''}
-    ${r.footer ? `<div class="sr-foot">${r.footer}${r.gen && r.gen.at ? ` · üretim: ${String(r.gen.by || '')} ${new Date(r.gen.at).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: TZ })}` : ''}</div>` : ''}
+    ${r.footer ? `<div class="sr-foot">${r.footer}${r.gen && r.gen.at ? ` · üretim: ${String(r.gen.by || '')} ${new Date(r.gen.at).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: TZ })}` : ''}${r.gen && r.gen.fpl ? `<br><span style="opacity:.7">FPL: ${r.gen.fpl.loaded ? `yüklendi(${r.gen.fpl.teams}) · ev=${r.gen.fpl.home} · dep=${r.gen.fpl.away}` : 'YÜKLENEMEDİ (Vercel FPL erişemedi)'}</span>` : ''}</div>` : ''}
   </div>`;
 }
 
