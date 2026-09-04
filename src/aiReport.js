@@ -454,8 +454,9 @@ HAZIR GERÇEKLER (kaynaklardan çekildi — DEĞİŞTİRME, olduğu gibi kullan)
 5) Hakem: bu maça atanan hakem açıklandıysa yaz.
 6) PPDA veya pres yoğunluğu (baskı): ${seasonStr} yoksa ${prevStr} değerini kullan, kaynağı ima et.
 7) Güncel form ve lig sırası bilgisini "intro" ve "why" içinde kullan.
+8) MUHTEMEL İLK 11: iki takımın bu maç için TAHMİNİ/muhtemel ilk 11'ini ara (SofaScore "predicted lineup", whoscored, sportsgambler, fantasy siteleri). Her takım için 11 oyuncu adı ver ve varsa diziliş (ör. 4-3-3). BULAMAZSAN ilgili takım için BOŞ dizi [] koy. Bu MUHTEMEL bir kadro; kesin değil. ASLA oyuncu adı UYDURMA — yalnızca aramada gördüğün gerçek isimleri yaz.
 
-KURALLAR: Sadece gerçekten aradıktan sonra hiçbir şey bulamazsan o değeri "veri yok" yaz. Tahmini bir aralık, geçen sezon ortalaması gibi GERÇEK bir veri her zaman "veri yok"dan iyidir. Ama ASLA uydurma/rastgele sayı verme; verdiğin sayı aranan gerçek bir kaynaktan olmalı.
+KURALLAR: Sadece gerçekten aradıktan sonra hiçbir şey bulamazsan o değeri "veri yok" yaz (kadroda boş dizi). Tahmini bir aralık, geçen sezon ortalaması gibi GERÇEK bir veri her zaman "veri yok"dan iyidir. Ama ASLA uydurma/rastgele sayı ya da oyuncu adı verme; verdiğin her şey aranan gerçek bir kaynaktan olmalı.
 
 SADECE şu JSON'u döndür (başka metin, markdown, açıklama YOK):
 {"meta":{"league":"Premier Lig","week":null,"date":"${dateStr}","stadium":${JSON.stringify(facts.stadium)}},
@@ -467,6 +468,7 @@ SADECE şu JSON'u döndür (başka metin, markdown, açıklama YOK):
 "h2h_note":"1 cümle | null",
 "extras":[["Hakem",${JSON.stringify(facts.referee || '<hakem>')}],["Baskı (PPDA)","<ev> — <dep> (dönem)"]],
 "why":"2-3 cümle, oranlar + xG + form birlikte",
+"lineups":{"homeFormation":"<diziliş> | null","awayFormation":"<diziliş> | null","home":["<11 gerçek oyuncu adı> veya boş []"],"away":["<11 gerçek oyuncu adı> veya boş []"]},
 "footer":"Bu rapor istatistiksel analiz içerir; kesin sonuç garantisi vermez."}`;
 }
 
@@ -497,6 +499,23 @@ async function generateReportFor(match) {
   // Son 5 lig maci formu (Understat'tan; deterministik olarak eklenir).
   if (facts.formHome || facts.formAway) {
     report.form = { homeTeam: match.home_team, awayTeam: match.away_team, home: facts.formHome || [], away: facts.formAway || [] };
+  }
+  // Muhtemel 11'i temizle: sadece gecerli isim dizileri, en fazla 11; ikisi de bossa kaldir.
+  if (report.lineups && typeof report.lineups === 'object') {
+    const clean11 = (arr) => (Array.isArray(arr) ? arr : [])
+      .map((x) => String(x || '').trim())
+      .filter((x) => x && !isEmptyVal(x))
+      .slice(0, 11);
+    const home = clean11(report.lineups.home);
+    const away = clean11(report.lineups.away);
+    if (home.length || away.length) {
+      report.lineups = {
+        homeTeam: match.home_team, awayTeam: match.away_team,
+        homeFormation: report.lineups.homeFormation && !isEmptyVal(report.lineups.homeFormation) ? String(report.lineups.homeFormation).trim() : null,
+        awayFormation: report.lineups.awayFormation && !isEmptyVal(report.lineups.awayFormation) ? String(report.lineups.awayFormation).trim() : null,
+        home, away,
+      };
+    } else { delete report.lineups; }
   }
   // Bos ("veri yok") satirlari hic gosterme.
   report.data = stripEmpty(report.data);

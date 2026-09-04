@@ -532,6 +532,54 @@ function srForm(f) {
     </div>
     <div class="sr-formlegend"><span><i class="form-dot g">G</i>Galibiyet</span><span><i class="form-dot b">B</i>Beraberlik</span><span><i class="form-dot m">M</i>Mağlubiyet</span><span class="sr-formhint">tüm turnuvalar · en solda en yeni</span></div>`;
 }
+function srLastName(n) { const p = String(n || '').trim().split(/\s+/); return p[p.length - 1] || ''; }
+function srParseFormation(f) { return String(f || '').split(/[^0-9]+/).map((x) => parseInt(x, 10)).filter((x) => x > 0); }
+// Oyuncu isim listesi (kaleci ilk) yerine liste görünümü (yedek).
+function srXiList(team, formation, players) {
+  const list = (players || []).map((p) => `<li>${p}</li>`).join('');
+  return `<div class="sr-xi-col">
+    <div class="sr-xi-team">${team || ''}${formation ? ` <span class="sr-xi-form">${formation}</span>` : ''}</div>
+    ${list ? `<ol class="sr-xi-list">${list}</ol>` : '<div class="form-na">veri yok</div>'}
+  </div>`;
+}
+// Dizilişe göre oyuncuları SAHA üzerinde konumlandırır (kaleci altta, forvet üstte).
+function srPitch(team, formation, players) {
+  const lines = srParseFormation(formation);
+  const outfield = lines.reduce((a, b) => a + b, 0);
+  const pl = players || [];
+  // Diziliş çözülemiyorsa (toplam 10 değil veya 11 oyuncu yok) liste görünümüne düş.
+  if (outfield !== 10 || pl.length < 11) return srXiList(team, formation, players);
+  const rows = [[pl[0]]]; let idx = 1;
+  for (const k of lines) { rows.push(pl.slice(idx, idx + k)); idx += k; }
+  const n = rows.length;
+  let chips = '';
+  rows.forEach((row, i) => {
+    const top = 90 - i * (80 / (n - 1));
+    row.forEach((name, j) => {
+      const left = (j + 1) / (row.length + 1) * 100;
+      chips += `<div class="pl" style="left:${left}%;top:${top}%"><span class="pl-dot"></span><span class="pl-nm">${srLastName(name)}</span></div>`;
+    });
+  });
+  const svg = '<svg class="pl-lines" viewBox="0 0 100 150" preserveAspectRatio="none">'
+    + '<rect x="1" y="1" width="98" height="148" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="0.6"/>'
+    + '<line x1="1" y1="75" x2="99" y2="75" stroke="rgba(255,255,255,.5)" stroke-width="0.6"/>'
+    + '<circle cx="50" cy="75" r="11" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="0.6"/>'
+    + '<rect x="28" y="1" width="44" height="20" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="0.6"/>'
+    + '<rect x="28" y="129" width="44" height="20" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="0.6"/></svg>';
+  return `<div class="sr-pitch-col">
+    <div class="sr-xi-team">${team || ''}${formation ? ` <span class="sr-xi-form">${formation}</span>` : ''}</div>
+    <div class="sr-pitch">${svg}${chips}</div>
+  </div>`;
+}
+function srLineups(l) {
+  if (!l || (!(l.home && l.home.length) && !(l.away && l.away.length))) return '';
+  return `<div class="sr-sec">MUHTEMEL İLK 11 <span class="sr-xi-tag">kesin değil</span></div>
+    <div class="sr-xi">
+      ${srPitch(l.homeTeam, l.homeFormation, l.home)}
+      ${srPitch(l.awayTeam, l.awayFormation, l.away)}
+    </div>
+    <div class="sr-note">Tahmini kadrodur; kesin 11 maçtan ~1 saat önce belli olur.</div>`;
+}
 function sahaReportHtml(r, m) {
   if (!r) return '';
   const meta = r.meta || {};
@@ -548,6 +596,7 @@ function sahaReportHtml(r, m) {
     ${r.form ? srForm(r.form) : ''}
     ${srClean(r.extras).length ? S('EK VERİLER') + srRows(r.extras) : ''}
     ${r.why ? S('NEDEN BU SONUÇ?') + `<p class="sr-p">${r.why}</p>` : ''}
+    ${r.lineups ? srLineups(r.lineups) : ''}
     ${r.footer ? `<div class="sr-foot">${r.footer}</div>` : ''}
   </div>`;
 }

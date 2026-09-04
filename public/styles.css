@@ -293,6 +293,24 @@ input{font-family:inherit}
 .sr-formlegend span{display:inline-flex;align-items:center;gap:5px}
 .sr-formlegend .form-dot{width:16px;height:16px;font-size:9px}
 .sr-formhint{font-style:italic}
+/* Muhtemel Ilk 11 */
+.sr-xi-tag{background:#fce7f2;color:var(--pri2);font-size:9px;font-weight:800;padding:2px 7px;border-radius:10px;letter-spacing:.3px;vertical-align:middle;margin-left:6px}
+.sr-xi{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px}
+.sr-xi-col{background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.sr-xi-team{font-size:12.5px;font-weight:800;color:var(--pri);margin-bottom:6px;line-height:1.3}
+.sr-xi-form{color:var(--pri2);font-size:11px;font-weight:800}
+.sr-xi-list{margin:0;padding-left:22px}
+.sr-xi-list li{font-size:12px;color:var(--ink);padding:1.5px 0;line-height:1.35}
+/* Saha (diziliş) görünümü */
+.sr-pitch-col{display:flex;flex-direction:column}
+.sr-pitch-col .sr-xi-team{text-align:center;margin-bottom:6px}
+.sr-pitch{position:relative;width:100%;aspect-ratio:2/3;border-radius:10px;overflow:hidden;background:linear-gradient(0deg,#1f9d55,#25b365)}
+.sr-pitch::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(255,255,255,.06) 0 8.33%,rgba(0,0,0,.04) 8.33% 16.66%)}
+.pl-lines{position:absolute;inset:0;width:100%;height:100%}
+.pl{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:2px;width:52px;pointer-events:none}
+.pl-dot{width:22px;height:22px;border-radius:50%;background:#fff;border:2px solid var(--pri);box-shadow:0 2px 5px rgba(0,0,0,.3)}
+.pl-nm{font-size:9px;font-weight:800;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.75);white-space:nowrap;line-height:1}
+@media (max-width:380px){.sr-xi{grid-template-columns:1fr}}
 .sr-foot{color:var(--muted);font-size:10px;text-align:center;margin-top:16px;border-top:1px solid var(--line);padding-top:10px;line-height:1.5}
 
 /* ---------- Mac onizleme raporu (panel) ---------- */
