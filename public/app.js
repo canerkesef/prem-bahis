@@ -1106,6 +1106,7 @@ async function renderAdmin(el) {
       </p>
       <div class="admin-tools" style="margin-bottom:6px">
         <button class="btn-sm btn-blue" id="ai-gen">🤖 Eksik Raporları Üret</button>
+        <button class="btn-sm btn-ok" id="ai-refresh">🔄 Tüm Raporları Yenile</button>
         <button class="btn-sm" id="af-check" style="background:var(--bg);border:1px solid var(--line);color:var(--ink)">🔎 API-Football Kontrol</button>
       </div>
       <div id="ai-msg" style="margin:6px 0 12px;font-size:13px;color:var(--muted)"></div>
@@ -1280,6 +1281,26 @@ async function renderAdmin(el) {
       am.textContent = t;
       toast('AI rapor üretimi bitti');
     } catch (e) { am.style.color = 'var(--danger)'; am.textContent = e.message; }
+  });
+
+  if ($('#ai-refresh')) $('#ai-refresh').addEventListener('click', async () => {
+    const btn = $('#ai-refresh'); const am = $('#ai-msg');
+    if (btn.disabled) return;
+    if (!confirm('Tüm yaklaşan maçların raporu yeniden üretilecek (mevcut olanlar güncel verilerle yenilenir). Devam?')) return;
+    btn.disabled = true; const old = btn.textContent; btn.textContent = 'Yenileniyor…';
+    am.style.color = 'var(--muted)'; am.textContent = 'Raporlar yenileniyor… (birkaç dakika sürebilir, sayfada kal)';
+    try {
+      const r = await api('/admin/refresh-reports', { method: 'POST' });
+      if (r.error) { am.style.color = 'var(--danger)'; am.textContent = r.error; return; }
+      if (r.skipped === 'locked') { am.textContent = 'Şu an başka bir üretim sürüyor, birazdan tekrar dene.'; return; }
+      let t = `${r.generated || 0} rapor yenilendi.`;
+      if (r.remaining) t += ` ${r.remaining} maç kaldı — tamamlamak için tekrar “Tüm Raporları Yenile”ye bas.`;
+      if (r.errors && r.errors.length) t += ' Hatalar: ' + r.errors.join(' | ');
+      am.style.color = (r.errors && r.errors.length) ? 'var(--danger)' : 'var(--ok)';
+      am.textContent = t;
+      toast(r.remaining ? 'Kısmi yenilendi, tekrar bas' : 'Tüm raporlar güncellendi');
+    } catch (e) { am.style.color = 'var(--danger)'; am.textContent = e.message; }
+    finally { btn.disabled = false; btn.textContent = old; }
   });
 
   if ($('#af-check')) $('#af-check').addEventListener('click', async () => {

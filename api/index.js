@@ -9,7 +9,7 @@ const { sql, ensureAdmin, ensureSchema } = require('../src/db');
 const { seedSampleMatches } = require('../src/seed');
 const { refreshMatches, refreshResults, hasApi, fetchStandings, normName, fetchLiveScores } = require('../src/oddsApi');
 const { settleMatch, voidMatch, applyHalfTime } = require('../src/settle');
-const { generatePending, apiFootballDiag } = require('../src/aiReport');
+const { generatePending, apiFootballDiag, regenerateReports } = require('../src/aiReport');
 const { computeMarkets } = require('../src/odds-derive');
 
 const app = express();
@@ -305,6 +305,11 @@ app.post('/api/report/:id', reportAuth, async (req, res) => {
 // AI ile rapor üretimi: admin elle tetikler (test/ilk doldurma).
 app.post('/api/admin/generate-reports', requireAdmin, async (req, res) => {
   try { res.json(await generatePending({ budgetMs: 55000 })); }
+  catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+// TEK TUS: tum yaklasan maclarin raporunu yeniden uret (mevcut olani da gunceller).
+app.post('/api/admin/refresh-reports', requireAdmin, async (req, res) => {
+  try { res.json(await regenerateReports({ budgetMs: 55000 })); }
   catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 // Admin tani: API-Football anahtarinin plani ve maca dair gercek yaniti gosterir.

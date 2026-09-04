@@ -184,7 +184,10 @@ async function fdFacts(match) {
 }
 
 // ---------- Understat (UCRETSIZ xG/xGA; sayfadaki JSON'dan cekilir) ----------
+const UNDERSTAT_CACHE = {}; // { season: { at, data } } — coklu mac üretiminde tekrar cekmeyi onler
 async function understatLeague(season) {
+  const c = UNDERSTAT_CACHE[season];
+  if (c && Date.now() - c.at < 30 * 60 * 1000) return c.data;
   const res = await fetch(`https://understat.com/league/EPL/${season}`, { headers: { 'user-agent': 'Mozilla/5.0', 'accept-language': 'en' } });
   if (!res.ok) throw new Error(`understat ${res.status}`);
   const html = await res.text();
@@ -221,7 +224,9 @@ async function understatLeague(season) {
       }
     }
   }
-  return { stats: byName, rosters };
+  const result = { stats: byName, rosters };
+  UNDERSTAT_CACHE[season] = { at: Date.now(), data: result };
+  return result;
 }
 // Understat pozisyon kodunu G/D/M/F'ye indirger.
 function classifyPos(pos) {
@@ -719,4 +724,33 @@ async function generatePending(opts = {}) {
   return { ok: true, generated, errors };
 }
 
-module.exports = { generatePending, generateReportFor, apiFootballDiag };
+// TEK TUS: tum yaklasan maclarin raporunu YENIDEN uretir (mevcut olani da gunceller).
+// Butce dolarsa kaldigi yerden ilerlemek icin son 10 dk icinde yenilenmis olanlari atlar;
+// tekrar basildikca kalanlar tamamlanir.
+async function regenerateReports(opts = {}) {
+  const budgetMs = Number(opts.budgetMs || 55000);
+  if (!(process.env.GEMINI_API_KEY || '').trim()) return { ok: false, error: 'GEMINI_API_KEY yok' };
+  const claim = await sql`UPDATE app_state SET report_lock=now()
+    WHERE id=1 AND (report_lock IS NULL OR report_lock < now() - interval '3 minutes') RETURNING id`;
+  if (!claim.length) return { ok: true, skipped: 'locked', generated: 0, remaining: null };
+  const started = Date.now();
+  let generated = 0; const errors = []; let remaining = 0; let total = 0;
+  try {
+    const rows = await sql`SELECT id, home_team, away_team, commence_time, markets
+      FROM matches
+      WHERE status='open' AND commence_time > now()
+        AND (report_at IS NULL OR report_at < now() - interval '10 minutes')
+      ORDER BY commence_time ASC`;
+    total = rows.length;
+    for (const m of rows) {
+      if (Date.now() - started > budgetMs) { remaining = total - generated - errors.length; break; }
+      try { await generateReportFor(m); generated++; }
+      catch (e) { errors.push(`${m.home_team}-${m.away_team}: ${String(e.message || e).slice(0, 140)}`); }
+    }
+  } finally {
+    await sql`UPDATE app_state SET report_lock=NULL WHERE id=1`;
+  }
+  return { ok: true, generated, remaining, total, errors };
+}
+
+module.exports = { generatePending, generateReportFor, apiFootballDiag, regenerateReports };
