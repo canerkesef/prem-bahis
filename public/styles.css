@@ -299,6 +299,12 @@ input{font-family:inherit}
 .sr-src-tag.ok{background:#e7f7ee;color:#12a05c}
 .sr-src-tag.ai{background:#fff3e0;color:#e08a00}
 .sr-xi{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px}
+/* Muhtemel 11 — okunaklı gruplu liste (iki takım alt alta) */
+.sr-lineups{display:flex;flex-direction:column;gap:10px;margin-top:4px}
+.sr-ll{margin-top:6px}
+.sr-ll-row{display:flex;gap:10px;padding:6px 0;border-top:1px solid var(--line)}
+.sr-ll-k{color:var(--muted);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.3px;min-width:82px;flex-shrink:0;padding-top:1px}
+.sr-ll-v{color:var(--ink);font-weight:600;font-size:13px;line-height:1.5}
 .sr-xi-col{background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
 .sr-xi-team{font-size:12.5px;font-weight:800;color:var(--pri);margin-bottom:6px;line-height:1.3}
 .sr-xi-form{color:var(--pri2);font-size:11px;font-weight:800}

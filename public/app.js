@@ -572,16 +572,32 @@ function srPitch(team, formation, players, srcTag) {
     <div class="sr-pitch">${svg}${chips}</div>
   </div>`;
 }
+// Pozisyona göre gruplu OKUNAKLI liste (kaleci/defans/orta/forvet).
+function srLineupList(team, formation, players, srcTag) {
+  const pl = (players || []).filter(Boolean);
+  const tag = srcTag === 'ai' ? '<span class="sr-src-tag ai">AI tahmini</span>'
+    : srcTag === 'fpl' ? '<span class="sr-src-tag ok">güncel</span>' : '';
+  const head = `<div class="sr-xi-team">${team || ''}${tag}</div>`;
+  if (pl.length < 11) return `<div class="sr-xi-col">${head}<div class="form-na">veri yok</div></div>`;
+  const lines = srParseFormation(formation);
+  const gk = pl[0]; let idx = 1;
+  const labels = ['Defans', 'Orta Saha', 'Forvet'];
+  const rows = [['Kaleci', [gk]]];
+  lines.forEach((k, i) => { rows.push([labels[i] || 'Oyuncular', pl.slice(idx, idx + k)]); idx += k; });
+  const body = rows.filter((r) => r[1].length).map(([lab, names]) =>
+    `<div class="sr-ll-row"><span class="sr-ll-k">${lab}</span><span class="sr-ll-v">${names.join(' · ')}</span></div>`).join('');
+  return `<div class="sr-xi-col">${head}<div class="sr-ll">${body}</div></div>`;
+}
 function srLineups(l) {
   if (!l || (!(l.home && l.home.length) && !(l.away && l.away.length))) return '';
   const hs = l.homeSrc || (l.src === 'ai' ? 'ai' : 'fpl');
   const as = l.awaySrc || (l.src === 'ai' ? 'ai' : 'fpl');
   return `<div class="sr-sec">MUHTEMEL İLK 11 <span class="sr-xi-tag">kesin değil</span></div>
-    <div class="sr-xi">
-      ${srPitch(l.homeTeam, l.homeFormation, l.home, hs)}
-      ${srPitch(l.awayTeam, l.awayFormation, l.away, as)}
+    <div class="sr-lineups">
+      ${srLineupList(l.homeTeam, l.homeFormation, l.home, hs)}
+      ${srLineupList(l.awayTeam, l.awayFormation, l.away, as)}
     </div>
-    <div class="sr-note">Resmi FPL kadrosundan (bu sezon en çok oynayanlar) kuruldu. Tahmini kadrodur; kesin 11 maçtan ~1 saat önce belli olur.</div>`;
+    <div class="sr-note">Resmi FPL kadrosundan (bu sezon en çok oynayanlar) kuruldu; pozisyonlar FPL'ye göre gruplanmıştır. Tahmini kadrodur; kesin 11 maçtan ~1 saat önce belli olur.</div>`;
 }
 function sahaReportHtml(r, m) {
   if (!r) return '';
@@ -764,6 +780,7 @@ async function renderKuponlarim(el) {
     return;
   }
   el.innerHTML = `<div class="section-title">Kuponlarım <small>${coupons.length} kupon</small></div>` + coupons.map(couponCard).join('');
+  wireCouponCancels(el, async () => { await refreshMe(); renderKuponlarim(el); });
 }
 
 function couponCard(c) {
@@ -783,7 +800,22 @@ function couponCard(c) {
       <span>${fmtDate(c.commence_time)}${score}</span>
     </div>
     ${c.created_at ? `<div class="coupon-stamp" title="Kuponun oynanma zamanı (saniyeye kadar)">🕒 Oynanma: ${fmtStamp(c.created_at)}</div>` : ''}
+    ${(ME.is_admin && c.status === 'pending') ? `<button class="btn-sm btn-no coupon-cancel" data-cid="${c.id}" style="margin-top:8px">✕ Kuponu İptal Et (iade)</button>` : ''}
   </div>`;
+}
+// Admin: kupon iptal butonlarini bagla (iptal edilince iade + listeyi tazele).
+function wireCouponCancels(el, onDone) {
+  if (!ME.is_admin) return;
+  $$('.coupon-cancel', el).forEach((b) => b.addEventListener('click', async () => {
+    if (b.disabled) return;
+    if (!confirm('Bu kupon iptal edilecek ve yatırılan tutar oyuncuya iade edilecek. Emin misin?')) return;
+    b.disabled = true;
+    try {
+      const r = await api(`/admin/coupons/${b.dataset.cid}/cancel`, { method: 'POST' });
+      toast(`Kupon iptal edildi, ${fmtTL(r.refunded)} iade edildi ✅`);
+      if (typeof onDone === 'function') onDone();
+    } catch (e) { toast(e.message, true); b.disabled = false; }
+  }));
 }
 
 // ----- Kullanicilar -----
@@ -896,6 +928,7 @@ async function renderUserDetail(uid) {
     ${couponsHtml}`;
 
   $('#back-btn').addEventListener('click', () => render('kullanicilar'));
+  wireCouponCancels(el, async () => { await refreshMe(); renderUserDetail(uid); });
 
   if (ME.is_admin) {
     $('#adm-balance-save').addEventListener('click', async () => {

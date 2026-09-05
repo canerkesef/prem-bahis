@@ -576,7 +576,28 @@ app.post('/api/admin/users/:id/balance', requireAdmin, async (req, res) => {
     const balance = Number(req.body.balance);
     if (!Number.isFinite(balance) || balance < 0) return res.status(400).json({ error: 'Gecersiz bakiye.' });
     await sql`UPDATE users SET balance=${balance} WHERE id=${Number(req.params.id)}`;
+    // Bakiye yeterliyse elenme bayragini kaldir.
+    await sql`UPDATE users SET eliminated=false WHERE id=${Number(req.params.id)} AND balance >= ${MIN_STAKE}`;
     res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+
+// Admin: BEKLEYEN bir kuponu iptal et — yatirilan tutari oyuncuya iade eder (void).
+// Sonuclanmis (kazandi/kaybetti/iptal) kupon iptal edilemez.
+app.post('/api/admin/coupons/:id/cancel', requireAdmin, async (req, res) => {
+  try {
+    const cid = Number(req.params.id);
+    const rows = await sql`SELECT id, user_id, stake, status FROM coupons WHERE id=${cid}`;
+    const c = rows[0];
+    if (!c) return res.status(404).json({ error: 'Kupon bulunamadi.' });
+    if (c.status !== 'pending') return res.status(400).json({ error: 'Sadece BEKLEYEN kupon iptal edilebilir; sonuclanmis kupon iptal edilemez.' });
+    await sql.begin(async (tx) => {
+      await tx`UPDATE users SET balance = balance + ${c.stake} WHERE id=${c.user_id}`;
+      await tx`UPDATE coupons SET status='void', settled_at=now() WHERE id=${cid}`;
+    });
+    await sql`UPDATE users SET eliminated=false WHERE id=${c.user_id} AND balance >= ${MIN_STAKE}`;
+    const b = await sql`SELECT balance FROM users WHERE id=${c.user_id}`;
+    res.json({ ok: true, refunded: Number(c.stake), balance: Number(b[0].balance) });
   } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 
