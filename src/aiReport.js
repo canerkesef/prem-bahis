@@ -146,7 +146,9 @@ async function fdTeamForm(teamId) {
       if (x.score.winner === 'DRAW') r = 'B';
       else if ((x.score.winner === 'HOME_TEAM' && isHome) || (x.score.winner === 'AWAY_TEAM' && !isHome)) r = 'G';
       const comp = compShort(x.competition && (x.competition.code || x.competition.name));
-      return { r, comp };
+      const opp = isHome ? (x.awayTeam && x.awayTeam.name) : (x.homeTeam && x.homeTeam.name);
+      const sc = x.score.fullTime ? `${x.score.fullTime.home}-${x.score.fullTime.away}` : '';
+      return { r, comp, when: (x.utcDate || '').slice(0, 7), opp: (opp || '').replace(/ FC$/, ''), sc };
     });
   } catch (_) { return null; }
 }
@@ -289,7 +291,7 @@ async function understatXG(match) {
     if (!x || !x.hist) return null;
     const last = x.hist.filter((h) => h.result).sort((p, q) => new Date(q.date) - new Date(p.date)).slice(0, 5); // yeni -> eski
     if (!last.length) return null;
-    return last.map((h) => ({ r: h.result === 'w' ? 'G' : h.result === 'd' ? 'B' : 'M', comp: 'Lig' }));
+    return last.map((h) => ({ r: h.result === 'w' ? 'G' : h.result === 'd' ? 'B' : 'M', comp: 'Lig', when: (h.date || '').slice(0, 7) }));
   };
   return {
     xg: `${f(h)} — ${f(a)} (${period})`,
@@ -303,6 +305,100 @@ async function understatXG(match) {
 // ---------- Fantasy Premier League (RESMI, UCRETSIZ): guncel kadro + sakat/cezali ----------
 // Tek istek tum takim ve oyuncularin GUNCEL durumunu verir (transfer/sakat dahil).
 let FPL_CACHE = { at: 0, teams: null };
+let FPL_RAW = { at: 0, json: null };
+let FPL_LB = { at: 0, data: null };
+// Ham bootstrap-static'i tek yerden cek + 30 dk cache (hem kadro hem istatistik kullanir).
+async function fplBootstrap() {
+  const now = Date.now();
+  if (FPL_RAW.json && now - FPL_RAW.at < 30 * 60 * 1000) return FPL_RAW.json;
+  const res = await fetch('https://fantasy.premierleague.com/api/bootstrap-static/', { headers: { 'user-agent': 'Mozilla/5.0' } });
+  if (!res.ok) return null;
+  const j = await res.json();
+  FPL_RAW = { at: now, json: j };
+  return j;
+}
+// Lig geneli istatistik listeleri (gol/asist/form/puan/kaleci/kart) — FPL'den, ucretsiz.
+async function fplLeaderboards() {
+  const now = Date.now();
+  if (FPL_LB.data && now - FPL_LB.at < 15 * 60 * 1000) return FPL_LB.data;
+  const j = await fplBootstrap().catch(() => null);
+  if (!j) return null;
+  const teamById = {}; for (const t of j.teams || []) teamById[t.id] = t;
+  const posMap = { 1: 'K', 2: 'D', 3: 'O', 4: 'F' };
+  const rows = [];
+  for (const e of j.elements || []) {
+    const t = teamById[e.team]; if (!t) continue;
+    const pos = posMap[e.element_type]; if (!pos) continue;
+    const g = Number(e.goals_scored || 0), a = Number(e.assists || 0);
+    rows.push({
+      name: e.web_name, short: t.short_name, pos, code: e.code || null, num: e.squad_number || null,
+      goals: g, assists: a, ga: g + a, form: Number(e.form || 0), pts: Number(e.total_points || 0),
+      mins: Number(e.minutes || 0), cs: Number(e.clean_sheets || 0), saves: Number(e.saves || 0),
+      yc: Number(e.yellow_cards || 0), rc: Number(e.red_cards || 0),
+    });
+  }
+  const N = 20;
+  const c = (r) => ({ n: r.name, t: r.short, p: r.pos, c: r.code, num: r.num, g: r.goals, a: r.assists, ga: r.ga, f: r.form, pt: r.pts, cs: r.cs, sv: r.saves, yc: r.yc, rc: r.rc });
+  const top = (arr, key, tie) => arr.slice().sort((x, y) => (y[key] - x[key]) || (tie ? tie(x, y) : 0) || (y.mins - x.mins)).slice(0, N).map(c);
+  const pos = (r) => r.filter((x) => x.mins > 0);
+  const data = {
+    updated: now,
+    gw: ((j.events || []).find((e) => e.is_current) || {}).id || null,
+    gol: top(rows.filter((r) => r.goals > 0), 'goals'),
+    asist: top(rows.filter((r) => r.assists > 0), 'assists'),
+    katki: top(rows.filter((r) => r.ga > 0), 'ga', (x, y) => y.goals - x.goals),
+    form: top(rows.filter((r) => r.mins >= 90), 'form'),
+    puan: top(pos(rows), 'pts'),
+    kaleci: top(rows.filter((r) => (r.pos === 'K' || r.pos === 'D') && r.cs > 0), 'cs', (x, y) => y.saves - x.saves),
+    kart: rows.filter((r) => (r.yc + r.rc) > 0).sort((x, y) => ((y.yc + y.rc * 3) - (x.yc + x.rc * 3)) || (y.rc - x.rc) || (y.yc - x.yc)).slice(0, N).map(c),
+  };
+  FPL_LB = { at: now, data };
+  return data;
+}
+// Mac bazli golcu + asist (FPL fixtures/stats'ten; DAKIKA yok, golcu/asist var). Ucretsiz.
+let FPL_FIX = { at: 0, map: null };
+async function fplFixtureGoals() {
+  const now = Date.now();
+  if (FPL_FIX.map && now - FPL_FIX.at < 15 * 60 * 1000) return FPL_FIX.map;
+  const boot = await fplBootstrap().catch(() => null);
+  if (!boot) return null;
+  const elName = {}; for (const e of boot.elements || []) elName[e.id] = e.web_name;
+  const teamName = {}; for (const t of boot.teams || []) teamName[t.id] = t.name;
+  let fixtures = null;
+  try {
+    const res = await fetch('https://fantasy.premierleague.com/api/fixtures/', { headers: { 'user-agent': 'Mozilla/5.0' } });
+    if (!res.ok) return null;
+    fixtures = await res.json();
+  } catch (_) { return null; }
+  const map = {};
+  const stat = (f, id) => { const s = (f.stats || []).find((x) => x.identifier === id); return s ? { h: s.h || [], a: s.a || [] } : { h: [], a: [] }; };
+  const names = (arr) => arr.map((x) => ({ name: elName[x.element] || ('#' + x.element), n: Number(x.value || 1) }));
+  for (const f of fixtures || []) {
+    if (!f.finished && !f.finished_provisional) continue;
+    const hk = clubKey(teamName[f.team_h] || ''), ak = clubKey(teamName[f.team_a] || '');
+    if (!hk || !ak) continue;
+    const g = stat(f, 'goals_scored'), a = stat(f, 'assists'), og = stat(f, 'own_goals');
+    const key = `${hk}|${ak}`;
+    (map[key] = map[key] || []).push({
+      day: (f.kickoff_time || '').slice(0, 10),
+      hs: f.team_h_score, as: f.team_a_score,
+      homeGoals: names(g.h), awayGoals: names(g.a),
+      homeAssists: names(a.h), awayAssists: names(a.a),
+      homeOG: names(og.h), awayOG: names(og.a),
+    });
+  }
+  FPL_FIX = { at: now, map };
+  return map;
+}
+// Bir macin golcu/asist detayini bul (takim adi + tarihe gore en yakin fikstur).
+function fplGoalsFor(map, home, away, commence) {
+  if (!map) return null;
+  const arr = map[`${clubKey(home)}|${clubKey(away)}`];
+  if (!arr || !arr.length) return null;
+  if (arr.length === 1) return arr[0];
+  const t = new Date(commence).getTime();
+  return arr.slice().sort((x, y) => Math.abs(new Date(x.day).getTime() - t) - Math.abs(new Date(y.day).getTime() - t))[0];
+}
 function clubKey(name) {
   // SADECE harf/rakama indir: boşluk, nokta, kesme, GÖRÜNMEZ karakter (zero-width vb.) hepsi gider.
   const raw = String(name || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]/g, '');
@@ -332,9 +428,8 @@ async function fplData() {
   const now = Date.now();
   if (FPL_CACHE.teams && now - FPL_CACHE.at < 30 * 60 * 1000) return FPL_CACHE.teams;
   try {
-    const res = await fetch('https://fantasy.premierleague.com/api/bootstrap-static/', { headers: { 'user-agent': 'Mozilla/5.0' } });
-    if (!res.ok) return null;
-    const j = await res.json();
+    const j = await fplBootstrap();
+    if (!j) return null;
     const teamById = {};
     const out = {};
     for (const t of j.teams || []) { teamById[t.id] = t; out[clubKey(t.name)] = { name: t.name, short: t.short_name, players: [] }; }
@@ -345,7 +440,8 @@ async function fplData() {
       const k = clubKey(t.name); if (!out[k]) continue;
       out[k].players.push({
         name: e.web_name, pos, mins: Number(e.minutes || 0), starts: Number(e.starts || 0),
-        status: e.status || 'a', news: e.news || '',
+        status: e.status || 'a', news: e.news || '', form: Number(e.form || 0),
+        code: e.code || null, num: e.squad_number || null, // foto kodu + forma no
       });
     }
     FPL_CACHE = { at: now, teams: out };
@@ -360,6 +456,10 @@ function fplFind(fpl, teamName) {
   return e ? e[1] : null;
 }
 // Guncel muhtemel 11 (sakat/cezali/ayrilan HARIC), en cok oynayanlardan.
+// FPL sadece K/D/O/F kovalari verir; gercek diziliş yok. Bu yuzden en cok
+// oynayan 10 saha oyuncusunu secip standart bir dizilise (savunma 3-5,
+// orta 2-5, forvet 1-3) YAKLASIK olarak dagitiyoruz. Oyuncular dogru,
+// tam mevkiler tahminidir.
 function fplXI(team) {
   if (!team || !Array.isArray(team.players)) return null;
   const playable = team.players.filter((p) => p.status === 'a' || p.status === 'd');
@@ -368,9 +468,23 @@ function fplXI(team) {
   const out = playable.filter((p) => p !== gk && p.pos !== 'G')
     .sort((a, b) => (b.mins - a.mins) || (b.starts - a.starts)).slice(0, 10);
   if (out.length < 10) return null;
-  const D = [], M = [], F = [];
-  for (const p of out) { (p.pos === 'D' ? D : p.pos === 'F' ? F : M).push(p.name); }
-  return { formation: `${D.length}-${M.length}-${F.length}`, players: [gk.name, ...D, ...M, ...F] };
+  // Ham kovalara ayir (her kova icinde dakikaya gore azalan sirada).
+  const D = out.filter((p) => p.pos === 'D');
+  const F = out.filter((p) => p.pos === 'F');
+  const M = out.filter((p) => p.pos !== 'D' && p.pos !== 'F');
+  // Dengeli dizilise dagit — en az dakikali oyuncular hat degistirir.
+  while (F.length < 1 && M.length > 0) F.push(M.pop());   // en az 1 forvet
+  while (F.length > 3) M.push(F.pop());                    // forvet en fazla 3
+  while (D.length > 5) M.push(D.pop());                    // savunma en fazla 5
+  while (D.length < 3 && M.length > 2) D.push(M.pop());    // savunma en az 3
+  while (M.length > 5) { (F.length < 3 ? F : D).push(M.pop()); } // orta en fazla 5
+  while (M.length < 2 && D.length > 3) M.push(D.pop());    // orta en az 2
+  const obj = (p) => ({ name: p.name, rating: p.form != null ? Number(p.form).toFixed(1) : null, code: p.code || null, num: p.num || null }); // rating = FPL form, code = foto
+  return {
+    formation: `${D.length}-${M.length}-${F.length}`,
+    lines: { d: D.length, m: M.length, f: F.length },
+    players: [obj(gk), ...D.map(obj), ...M.map(obj), ...F.map(obj)],
+  };
 }
 // Guncel eksik listesi (sakat/cezali/supheli) — resmi status'ten.
 function fplInjuries(team) {
@@ -706,7 +820,7 @@ async function generateReportFor(match) {
     };
   } else { delete report.lineups; }
   // Surum damgasi + FPL kendini teshis (eski rapor karisikligini ve eslesme sorununu gosterir).
-  report.gen = { by: 'fpl-xi-v3', at: new Date().toISOString(), fpl: facts.fplDbg || null };
+  report.gen = { by: 'fpl-xi-v4', at: new Date().toISOString(), fpl: facts.fplDbg || null };
   // Bos ("veri yok") satirlari hic gosterme.
   report.data = stripEmpty(report.data);
   report.extras = stripEmpty(report.extras);
@@ -773,4 +887,4 @@ async function regenerateReports(opts = {}) {
   return { ok: true, generated, remaining, total, errors };
 }
 
-module.exports = { generatePending, generateReportFor, apiFootballDiag, regenerateReports };
+module.exports = { generatePending, generateReportFor, apiFootballDiag, regenerateReports, fplLeaderboards, fplFixtureGoals, fplGoalsFor };

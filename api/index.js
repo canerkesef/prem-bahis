@@ -9,7 +9,7 @@ const { sql, ensureAdmin, ensureSchema } = require('../src/db');
 const { seedSampleMatches } = require('../src/seed');
 const { refreshMatches, refreshResults, hasApi, fetchStandings, normName, fetchLiveScores } = require('../src/oddsApi');
 const { settleMatch, voidMatch, applyHalfTime } = require('../src/settle');
-const { generatePending, apiFootballDiag, regenerateReports } = require('../src/aiReport');
+const { generatePending, apiFootballDiag, regenerateReports, fplLeaderboards, fplFixtureGoals, fplGoalsFor } = require('../src/aiReport');
 const { computeMarkets } = require('../src/odds-derive');
 
 const app = express();
@@ -217,6 +217,17 @@ app.get('/api/live', requireAuth, async (req, res) => {
   }
 });
 
+// Lig geneli istatistikler (gol/asist/form/puan/kaleci/kart) — FPL'den, ücretsiz + otomatik.
+app.get('/api/stats', requireAuth, async (req, res) => {
+  try {
+    const data = await fplLeaderboards();
+    if (!data) return res.json({ ok: false, error: 'FPL verisi alınamadı' });
+    res.json({ ok: true, ...data });
+  } catch (e) {
+    res.json({ ok: false, error: String(e.message || e) });
+  }
+});
+
 // Maç önizleme raporu: mevcut oranlar + gerçek puan durumu/formdan otomatik.
 // (Ücretsiz; ek API/anahtar gerektirmez. IY skoru gibi puan durumu football-data'dan.)
 app.get('/api/matches/:id/preview', requireAuth, async (req, res) => {
@@ -354,7 +365,17 @@ app.get('/api/standings', requireAuth, async (req, res) => {
 app.get('/api/matches/results', requireAuth, async (req, res) => {
   try {
     const rows = await sql`SELECT * FROM matches WHERE status IN ('settled','void') ORDER BY commence_time DESC LIMIT 100`;
-    res.json({ matches: rows.map(matchOut) });
+    const out = rows.map(matchOut);
+    // Golcu/asist detayini FPL fixtures'tan ekle (dakika yok; golcu+asist var). Bulunamazsa null.
+    const gmap = await fplFixtureGoals().catch(() => null);
+    if (gmap) {
+      for (const m of out) {
+        if (m.status !== 'settled') continue;
+        const g = fplGoalsFor(gmap, m.home_team, m.away_team, m.commence_time);
+        if (g) m.goals = g;
+      }
+    }
+    res.json({ matches: out });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
   }
@@ -485,8 +506,30 @@ app.get('/api/users', requireAuth, async (req, res) => {
       leaderDays = Math.max(0, Math.floor((Date.now() - new Date(leaderSince).getTime()) / 86400000));
     }
 
-    // 2) Oyuncular (guncel leader_ms ile).
-    const rows = await sql`SELECT id, username, is_admin, balance, eliminated, COALESCE(leader_ms,0) AS leader_ms FROM users WHERE status='approved' ORDER BY balance DESC`;
+    // 1b) Ayni mantikla SONUNCU (elenmemis en dusuk bakiye) takibi.
+    const botRow = await sql`SELECT id FROM users WHERE status='approved' AND eliminated=false ORDER BY balance ASC, id ASC LIMIT 1`;
+    let lastId = null, lastSince = null, lastDays = 0;
+    if (botRow.length) {
+      const botId = Number(botRow[0].id);
+      await sql.begin(async (tx) => {
+        const [st] = await tx`SELECT last_id, last_since FROM app_state WHERE id=1 FOR UPDATE`;
+        const cur = st && st.last_id != null ? Number(st.last_id) : null;
+        if (cur !== botId || !st.last_since) {
+          if (cur != null && st.last_since) {
+            await tx`UPDATE users SET last_ms = COALESCE(last_ms,0)
+              + (EXTRACT(EPOCH FROM (now() - ${st.last_since})) * 1000)::bigint WHERE id=${cur}`;
+          }
+          await tx`UPDATE app_state SET last_id=${botId}, last_since=now() WHERE id=1`;
+        }
+      });
+      const [st3] = await sql`SELECT last_id, last_since FROM app_state WHERE id=1`;
+      lastId = Number(st3.last_id);
+      lastSince = st3.last_since;
+      lastDays = Math.max(0, Math.floor((Date.now() - new Date(lastSince).getTime()) / 86400000));
+    }
+
+    // 2) Oyuncular (guncel leader_ms + last_ms ile).
+    const rows = await sql`SELECT id, username, is_admin, balance, eliminated, COALESCE(leader_ms,0) AS leader_ms, COALESCE(last_ms,0) AS last_ms FROM users WHERE status='approved' ORDER BY balance DESC`;
 
     // Kupon istatistikleri (kazanan/kaybeden/bekleyen + tutturulan toplam oran).
     const stats = await sql`
@@ -515,6 +558,8 @@ app.get('/api/users', requireAuth, async (req, res) => {
       const s = statMap[id] || {};
       const ongoing = id === leaderId && leaderSince ? now - new Date(leaderSince).getTime() : 0;
       const totalLeaderDays = Math.floor((Number(u.leader_ms) + ongoing) / 86400000);
+      const ongoingLast = id === lastId && lastSince ? now - new Date(lastSince).getTime() : 0;
+      const totalLastDays = Math.floor((Number(u.last_ms) + ongoingLast) / 86400000);
       return {
         id, username: u.username, is_admin: !!u.is_admin,
         balance: Number(u.balance), eliminated: !!u.eliminated,
@@ -522,10 +567,11 @@ app.get('/api/users', requireAuth, async (req, res) => {
         won_odds: Math.round(Number(s.won_odds || 0) * 100) / 100,
         missed: Math.max(totalSettled - (playedMap[id] || 0), 0),
         leader_total_days: totalLeaderDays,
+        last_total_days: totalLastDays,
       };
     });
 
-    res.json({ users, leaderDays });
+    res.json({ users, leaderDays, lastDays, lastId });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
   }
@@ -608,8 +654,8 @@ app.post('/api/admin/reset', requireAdmin, async (req, res) => {
     const alsoMatches = req.body && req.body.matches === true;
     await sql.begin(async (tx) => {
       await tx`DELETE FROM coupons`;
-      await tx`UPDATE users SET balance = ${START_BALANCE}, eliminated = false, leader_ms = 0`;
-      await tx`UPDATE app_state SET leader_id = NULL, leader_since = NULL WHERE id=1`;
+      await tx`UPDATE users SET balance = ${START_BALANCE}, eliminated = false, leader_ms = 0, last_ms = 0`;
+      await tx`UPDATE app_state SET leader_id = NULL, leader_since = NULL, last_id = NULL, last_since = NULL WHERE id=1`;
       if (alsoMatches) {
         await tx`UPDATE matches SET status='open', home_score=NULL, away_score=NULL, ht_home=NULL, ht_away=NULL WHERE status IN ('settled','void')`;
       }

@@ -63,6 +63,10 @@ function ensureSchema() {
     await sql`ALTER TABLE app_state ADD COLUMN IF NOT EXISTS leader_since timestamptz`;
     // Her oyuncunun TOPLAM liderlik suresi (milisaniye; gecmis tum donemler dahil).
     await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS leader_ms bigint NOT NULL DEFAULT 0`;
+    // Sonunculuk takibi (liderligin aynasi): mevcut sonuncu + ne zamandan beri + TOPLAM sure.
+    await sql`ALTER TABLE app_state ADD COLUMN IF NOT EXISTS last_id bigint`;
+    await sql`ALTER TABLE app_state ADD COLUMN IF NOT EXISTS last_since timestamptz`;
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_ms bigint NOT NULL DEFAULT 0`;
     // Maca ait "Saha Raporu" (AI ile sunucuda uretilip yazilir).
     await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS report jsonb`;
     await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS report_at timestamptz`;

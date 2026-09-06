@@ -226,6 +226,28 @@ input{font-family:inherit}
   color:#fff;border-radius:20px;padding:4px 13px;font-size:12px;font-weight:700}
 .champ-total{position:relative;display:inline-block;margin:7px 0 0 7px;color:#f4c9dc;font-size:12px;font-weight:700;vertical-align:middle}
 .lead-badge{display:inline-block;background:var(--pri);color:#fff;border-radius:6px;font-size:11px;font-weight:800;padding:1px 6px 1px 5px;margin-left:6px;vertical-align:middle}
+.last-badge{display:inline-flex;align-items:center;gap:3px;background:#8a7f93;color:#fff;border-radius:6px;font-size:11px;font-weight:800;padding:1px 6px 1px 4px;margin-left:6px;vertical-align:middle}
+.last-badge .bkt{display:block;flex-shrink:0}
+/* Sonuçlar — açılır maç detayı (İY/2Y/MS + golcü/asist) */
+.res-card{cursor:pointer}
+.res-head-b{display:flex;align-items:center;justify-content:space-between;margin-top:8px}
+.res-arrow{color:var(--muted);font-size:14px;transition:transform .2s}
+.res-card.open .res-arrow{transform:rotate(180deg)}
+.res-detail{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
+.rd-scores{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.rd-chip{background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:4px 10px;font-size:12px;color:var(--muted);font-weight:700}
+.rd-chip b{color:var(--ink);font-weight:800;font-variant-numeric:tabular-nums;margin-left:3px}
+.rd-chip.rd-ms{background:var(--pri);border-color:var(--pri);color:#fff}
+.rd-chip.rd-ms b{color:#fff}
+.rd-goals{display:flex;flex-direction:column;gap:10px}
+.rd-team{background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:9px 11px}
+.rd-tn{font-size:12px;font-weight:800;color:var(--pri);margin-bottom:4px}
+.rd-line{font-size:13px;color:var(--ink);font-weight:600;line-height:1.5;display:flex;gap:6px;align-items:flex-start}
+.rd-line i{color:var(--muted);font-weight:500}
+.rd-ico{flex-shrink:0}
+.rd-ast{color:var(--muted);font-weight:600}
+.rd-note{color:var(--muted);font-size:10.5px;margin-top:8px;line-height:1.4}
+.rd-row{display:flex;gap:10px}.rd-row .rd-k{color:var(--muted);font-weight:700}.rd-row .rd-v{color:var(--ink)}
 .champion .user-stats{position:relative;justify-content:center;border-top-color:rgba(255,255,255,.20);margin-top:12px;padding-top:11px}
 .champion .ust{color:#e7dbf3}
 .champion .ust.ok{color:#8ff0bf}.champion .ust.no{color:#ff9db0}.champion .ust.odds{color:#ffd0e0}
@@ -286,6 +308,12 @@ input{font-family:inherit}
 .sr-note{color:var(--muted);font-size:11px;font-style:italic;margin-top:8px}
 /* Son 5 lig maci formu (G/B/M) */
 .sr-form{display:flex;flex-direction:column;gap:8px;margin-top:4px}
+/* Son 5 maç — alt alta satırlar (rakip/skor + ay-yıl) */
+.sr-form2{display:flex;flex-direction:column;gap:14px;margin-top:4px}
+.fcol-team{font-size:13px;font-weight:800;color:var(--pri);margin-bottom:2px}
+.fmatch{display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--line)}
+.fmatch-mid{flex:1;min-width:0;font-size:12.5px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fmatch-date{flex-shrink:0;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
 .sr-form-row{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
 .sr-fteam{font-size:13px;font-weight:700;color:var(--ink);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sr-fdots{display:flex;gap:7px;flex-shrink:0;align-items:flex-start}
@@ -312,20 +340,68 @@ input{font-family:inherit}
 .sr-ll-row{display:flex;gap:10px;padding:6px 0;border-top:1px solid var(--line)}
 .sr-ll-k{color:var(--muted);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.3px;min-width:82px;flex-shrink:0;padding-top:1px}
 .sr-ll-v{color:var(--ink);font-weight:600;font-size:13px;line-height:1.5}
+/* Muhtemel 11 — her oyuncu ayrı satır */
+.pl-list{margin-top:6px}
+.pl-row{display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--line)}
+.pl-pos{min-width:22px;text-align:center;font-size:9.5px;font-weight:800;color:var(--muted);background:var(--soft);border:1px solid var(--line);border-radius:6px;padding:2px 0;flex-shrink:0}
+.pl-name{flex:1;min-width:0;font-size:13px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pl-rat{flex-shrink:0;min-width:30px;padding:1px 6px;text-align:center;font-size:11.5px;font-weight:800;color:#fff;background:#12a05c;border-radius:7px;font-variant-numeric:tabular-nums}
 .sr-xi-col{background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
 .sr-xi-team{font-size:12.5px;font-weight:800;color:var(--pri);margin-bottom:6px;line-height:1.3}
 .sr-xi-form{color:var(--pri2);font-size:11px;font-weight:800}
 .sr-xi-list{margin:0;padding-left:22px}
 .sr-xi-list li{font-size:12px;color:var(--ink);padding:1.5px 0;line-height:1.35}
 /* Saha (diziliş) görünümü */
+.sr-lineups-pitch{flex-direction:row;gap:8px}
+.sr-lineups-pitch .sr-pitch-col{flex:1;min-width:0}
 .sr-pitch-col{display:flex;flex-direction:column}
-.sr-pitch-col .sr-xi-team{text-align:center;margin-bottom:6px}
+.sr-pitch-col .sr-xi-team{text-align:center;margin-bottom:6px;font-size:11.5px}
 .sr-pitch{position:relative;width:100%;aspect-ratio:2/3;border-radius:10px;overflow:hidden;background:linear-gradient(0deg,#1f9d55,#25b365)}
 .sr-pitch::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(255,255,255,.06) 0 8.33%,rgba(0,0,0,.04) 8.33% 16.66%)}
 .pl-lines{position:absolute;inset:0;width:100%;height:100%}
-.pl{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:2px;width:52px;pointer-events:none}
-.pl-dot{width:22px;height:22px;border-radius:50%;background:#fff;border:2px solid var(--pri);box-shadow:0 2px 5px rgba(0,0,0,.3)}
-.pl-nm{font-size:9px;font-weight:800;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.75);white-space:nowrap;line-height:1}
+.pl{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:2px;width:46px;pointer-events:none}
+.pl-dot{position:relative;width:30px;height:30px;border-radius:50%;background:#e6ecf2 radial-gradient(circle at 50% 34%,#b3bdc8 0 22%,transparent 23%),radial-gradient(ellipse 62% 46% at 50% 104%,#b3bdc8 0 60%,transparent 61%);background-color:#e6ecf2;border:2px solid #fff;box-shadow:0 2px 5px rgba(0,0,0,.35);overflow:hidden;display:flex;align-items:center;justify-content:center}
+.pl-ph{width:100%;height:100%;object-fit:cover;object-position:top center;display:block}
+.pl-rt{position:absolute;top:-6px;right:-8px;min-width:15px;padding:0 2px;height:13px;line-height:13px;text-align:center;font-size:8.5px;font-weight:800;color:#fff;background:#12a05c;border:1px solid #fff;border-radius:7px;font-variant-numeric:tabular-nums;z-index:2}
+.pl-no{opacity:.85}
+.pl-nm{font-size:8.5px;font-weight:800;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.85);white-space:nowrap;line-height:1;max-width:54px;overflow:hidden;text-overflow:ellipsis}
+/* PL sitesi tarzi BEYAZ saha — iki takim tek sahada, foto kartlari */
+.ft-hd{text-align:center;font-weight:800;color:var(--pri);font-size:12.5px;line-height:1.3}
+.ft-top{margin:2px 0 5px}
+.ft-bot{margin:5px 0 2px}
+.ft-form{color:var(--pri2);font-size:11px;font-weight:800}
+.sr-fpitch{position:relative;width:100%;aspect-ratio:100/172;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.pf-lines{position:absolute;inset:0;width:100%;height:100%}
+.pf{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:2px;width:52px;pointer-events:none;z-index:1}
+.pf-ph-wrap{position:relative;width:36px;height:41px;border-radius:7px;overflow:hidden;background:#e6ecf2 radial-gradient(circle at 50% 33%,#b3bdc8 0 20%,transparent 21%),radial-gradient(ellipse 64% 42% at 50% 104%,#b3bdc8 0 60%,transparent 61%);background-color:#e6ecf2;border:1px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.pf-ph{width:100%;height:100%;object-fit:cover;object-position:top center;display:block}
+.pf-rt{margin-top:-6px;min-width:22px;padding:1px 5px;text-align:center;font-size:10px;font-weight:800;color:#fff;background:#12a05c;border:1.5px solid #fff;border-radius:8px;font-variant-numeric:tabular-nums;box-shadow:0 1px 3px rgba(0,0,0,.25);z-index:2}
+.pf-nm{margin-top:2px;font-size:9px;font-weight:800;color:var(--ink);text-align:center;line-height:1.08;max-width:56px}
+.pf-no{color:var(--muted);font-weight:800}
+/* Rating renk skalasi (kartela) */
+.sr-ratleg{display:flex;align-items:center;justify-content:center;gap:8px;margin:10px 0 2px;font-size:11px;font-weight:700;color:var(--muted)}
+.sr-ratleg .rl-t{color:var(--ink);font-weight:800}
+.sr-ratleg .rl-v{font-variant-numeric:tabular-nums;font-weight:800;color:var(--ink)}
+.sr-ratleg .rl-bar{width:120px;height:9px;border-radius:5px;background:linear-gradient(90deg,hsl(4,68%,42%),hsl(50,68%,45%),hsl(90,68%,42%),hsl(132,68%,42%));border:1px solid var(--line)}
+/* İstatistik paneli (FPL lig listeleri) */
+.stat-tabs{display:flex;gap:6px;overflow-x:auto;padding:4px 0 10px;scrollbar-width:none}
+.stat-tabs::-webkit-scrollbar{display:none}
+.stat-tab{flex:0 0 auto;padding:7px 13px;border:1px solid var(--line);background:var(--soft);color:var(--muted);border-radius:20px;font-size:12.5px;font-weight:700;white-space:nowrap;cursor:pointer}
+.stat-tab.active{background:var(--pri);color:#fff;border-color:var(--pri)}
+.lb{display:flex;flex-direction:column}
+.lb-row{display:flex;align-items:center;gap:10px;padding:7px 4px;border-bottom:1px solid var(--line)}
+.lb-rank{flex:0 0 20px;text-align:center;font-size:13px;font-weight:800;color:var(--muted);font-variant-numeric:tabular-nums}
+.lb-rank.lb-top1{color:#d4a017}.lb-rank.lb-top2{color:#8a94a6}.lb-rank.lb-top3{color:#b5734a}
+.lb-ph{flex:0 0 36px;width:36px;height:40px;border-radius:8px;overflow:hidden;background:#e6ecf2 radial-gradient(circle at 50% 33%,#b3bdc8 0 20%,transparent 21%),radial-gradient(ellipse 64% 42% at 50% 104%,#b3bdc8 0 60%,transparent 61%);background-color:#e6ecf2;border:1px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.15)}
+.lb-ph img{width:100%;height:100%;object-fit:cover;object-position:top center;display:block}
+.lb-nm{flex:1;min-width:0;font-size:13.5px;font-weight:700;color:var(--ink);line-height:1.3}
+.lb-nm small{color:var(--muted);font-weight:700;font-size:11px}
+.lb-sub{display:block;color:var(--muted);font-weight:600;font-size:11px}
+.lb-val{flex:0 0 auto;min-width:34px;text-align:center;padding:3px 10px;background:var(--pri);color:#fff;border-radius:8px;font-size:14px;font-weight:800;font-variant-numeric:tabular-nums}
+.lb-cards{flex:0 0 auto;display:flex;gap:5px;align-items:center}
+.lb-cards i{font-style:normal;font-weight:800;font-size:12px;color:#fff;min-width:22px;text-align:center;padding:3px 5px;border-radius:4px}
+.lb-cards .ycard{background:#f2c200;color:#4a3b00}
+.lb-cards .rcard{background:#d92b2b}
 @media (max-width:380px){.sr-xi{grid-template-columns:1fr}}
 .sr-foot{color:var(--muted);font-size:10px;text-align:center;margin-top:16px;border-top:1px solid var(--line);padding-top:10px;line-height:1.5}
 
@@ -532,6 +608,16 @@ input{font-family:inherit}
 // ---------- Yardimcilar ----------
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+
+// Boş metal su kovası ikonu (sonunculuk rozeti) — kulbu yana sarkık, küçük satır içi SVG.
+const BUCKET_SVG = '<svg class="bkt" viewBox="0 0 24 26" width="12" height="13" aria-hidden="true">'
+  + '<ellipse cx="12" cy="10" rx="7" ry="2" fill="#e6ebef" stroke="#9aa3ad" stroke-width=".8"/>'
+  + '<path d="M5.3 10 L18.7 10 L16.7 22.4 Q16.5 23.7 15.2 23.7 L8.8 23.7 Q7.5 23.7 7.3 22.4 Z" fill="#c9d0d7" stroke="#8f98a2" stroke-width=".8"/>'
+  + '<path d="M8 10.3 L7.4 22.5 Q7.35 22.9 7.8 23.1 L8.9 23.3 L9.2 10.3 Z" fill="#eef2f5" opacity=".6"/>'
+  + '<circle cx="6" cy="10.2" r="1" fill="#b7bfc7" stroke="#8f98a2" stroke-width=".5"/>'
+  + '<circle cx="18" cy="10.2" r="1" fill="#b7bfc7" stroke="#8f98a2" stroke-width=".5"/>'
+  + '<path d="M6.2 10.4 Q13 16 18 10.4" fill="none" stroke="#7b838d" stroke-width="1.3"/>'
+  + '</svg>';
 
 async function api(path, opts = {}) {
   const res = await fetch('/api' + path, {
@@ -743,6 +829,7 @@ function buildNav() {
     ['kuponlarim', 'Kuponlarım', '🧾'],
     ['kullanicilar', 'Oyuncular', '👥'],
     ['puan', 'Puan', '📊'],
+    ['istatistik', 'İstatistik', '📈'],
     ['sonuclar', 'Sonuçlar', '🏁'],
   ];
   if (ME.is_admin) items.push(['admin', 'Admin', '⚙️']);
@@ -811,6 +898,7 @@ async function render(view) {
     else if (view === 'kuponlarim') await renderKuponlarim(el);
     else if (view === 'kullanicilar') await renderKullanicilar(el);
     else if (view === 'puan') await renderPuan(el);
+    else if (view === 'istatistik') await renderStats(el);
     else if (view === 'sonuclar') await renderSonuclar(el);
     else if (view === 'admin') await renderAdmin(el);
   } catch (err) {
@@ -840,6 +928,66 @@ async function renderBulten(el) {
   // Baslamis (canli olabilecek) mac varsa canli skoru yoklamaya basla.
   const hasStarted = matches.some((m) => new Date(m.commence_time).getTime() <= Date.now() && m.status === 'open');
   if (hasStarted) startLivePolling(); else stopLivePolling();
+}
+
+// ----- İstatistikler (FPL lig geneli listeler) -----
+let STATS_DATA = null;
+const STAT_CATS = [
+  { key: 'gol', label: 'Gol Krallığı', val: (r) => r.g },
+  { key: 'asist', label: 'Asist Krallığı', val: (r) => r.a },
+  { key: 'katki', label: 'Gol+Asist', val: (r) => r.ga, sub: (r) => `${r.g}G · ${r.a}A` },
+  { key: 'form', label: 'En Formda', val: (r) => Number(r.f).toFixed(1), color: true },
+  { key: 'puan', label: 'FPL Puanı', val: (r) => r.pt },
+  { key: 'kaleci', label: 'Clean Sheet', val: (r) => r.cs, sub: (r) => `${r.sv} kurtarış` },
+  { key: 'kart', label: 'Kart', card: true },
+];
+function statPhoto(code) {
+  return code ? `<img src="https://resources.premierleague.com/premierleague/photos/players/110x140/p${code}.png" loading="lazy" alt="" onerror="this.remove()">` : '';
+}
+function statList(cat, rows) {
+  if (!rows || !rows.length) return '<div class="empty">Bu kategoride henüz veri yok (sezon başı olabilir).</div>';
+  const sc = cat.color ? { mn: Math.min(...rows.map((r) => Number(r.f))), mx: Math.max(...rows.map((r) => Number(r.f))) } : null;
+  const body = rows.map((r, i) => {
+    let val;
+    if (cat.card) {
+      val = `<span class="lb-cards">${r.yc ? `<i class="ycard">${r.yc}</i>` : ''}${r.rc ? `<i class="rcard">${r.rc}</i>` : ''}</span>`;
+    } else if (cat.color) {
+      const col = srRatColor(Number(r.f), sc) || '#12a05c';
+      val = `<span class="lb-val" style="background:${col};color:#fff;border:0">${cat.val(r)}</span>`;
+    } else {
+      val = `<span class="lb-val">${cat.val(r)}</span>`;
+    }
+    const sub = cat.sub ? `<small class="lb-sub">${cat.sub(r)}</small>` : '';
+    const medal = i < 3 ? ` lb-top${i + 1}` : '';
+    return `<div class="lb-row">
+      <span class="lb-rank${medal}">${i + 1}</span>
+      <span class="lb-ph">${statPhoto(r.c)}</span>
+      <span class="lb-nm">${r.n} <small>${r.t}</small>${sub}</span>
+      ${val}
+    </div>`;
+  }).join('');
+  return `<div class="lb">${body}</div>`;
+}
+async function renderStats(el) {
+  const data = await api('/stats').catch(() => null);
+  if (!data || !data.ok) {
+    el.innerHTML = `<div class="empty">İstatistikler şu an alınamadı.${data && data.error ? ` (${data.error})` : ''}</div>`;
+    return;
+  }
+  STATS_DATA = data;
+  const gwtxt = data.gw ? `${data.gw}. hafta` : 'güncel';
+  el.innerHTML =
+    `<div class="section-title">İstatistikler <small>FPL · ${gwtxt}</small></div>`
+    + `<div class="stat-tabs">${STAT_CATS.map((c, i) => `<button class="stat-tab${i === 0 ? ' active' : ''}" data-cat="${c.key}">${c.label}</button>`).join('')}</div>`
+    + `<div id="stat-list"></div>`
+    + `<p class="foot-tz">Kaynak: Fantasy Premier League · yalnızca Premier Lig oyuncuları · ~15 dk'da bir güncellenir</p>`;
+  const listEl = $('#stat-list', el);
+  const draw = (key) => { const cat = STAT_CATS.find((c) => c.key === key); listEl.innerHTML = statList(cat, STATS_DATA[key]); };
+  $$('.stat-tab', el).forEach((b) => b.addEventListener('click', () => {
+    $$('.stat-tab', el).forEach((x) => x.classList.toggle('active', x === b));
+    draw(b.dataset.cat);
+  }));
+  draw('gol');
 }
 
 // ----- Canli skor: PAYLASIMLI onbellekten okur (10 sn'de bir) -----
@@ -1043,23 +1191,35 @@ function srGauge(g) {
   const p = Math.max(0, Math.min(100, Math.round(Number(g.pct) || 0)));
   return `<div class="sr-gauge" style="--p:${p}"><div class="sr-ginner"><div class="sr-gnum">%${p}</div><div class="sr-glbl">${g.label || ''}</div></div></div>`;
 }
-function srFormChips(arr) {
-  if (!arr || !arr.length) return '<span class="form-na">veri yok</span>';
+function srMonthYear(ym) {
+  if (!ym || !/^\d{4}-\d{2}/.test(String(ym))) return '';
+  const [y, m] = String(ym).split('-');
+  const d = new Date(Number(y), Number(m) - 1, 1);
+  return isNaN(d) ? '' : d.toLocaleDateString('tr-TR', { month: 'short', year: 'numeric' });
+}
+// Son 5 maçı ALT ALTA satırlar halinde: sonuç + (rakip skoru · turnuva) + ay/yıl.
+function srFormRows(arr) {
+  if (!arr || !arr.length) return '<div class="form-na">veri yok</div>';
   return arr.map((x) => {
     const r = typeof x === 'string' ? x : (x && x.r) || '';
-    const comp = typeof x === 'object' && x && x.comp ? x.comp : '';
     const cls = r === 'G' ? 'g' : r === 'B' ? 'b' : 'm';
-    return `<span class="form-chip"><span class="form-dot ${cls}">${r}</span>${comp ? `<span class="form-comp">${comp}</span>` : ''}</span>`;
+    const comp = (x && x.comp) || '';
+    const opp = (x && x.opp) || '';
+    const sc = (x && x.sc) || '';
+    const when = srMonthYear(x && x.when);
+    const mid = [opp ? `${opp}${sc ? ` ${sc}` : ''}` : '', comp].filter(Boolean).join(' · ');
+    return `<div class="fmatch"><span class="form-dot ${cls}">${r}</span><span class="fmatch-mid">${mid || '&nbsp;'}</span><span class="fmatch-date">${when}</span></div>`;
   }).join('');
 }
 function srForm(f) {
   if (!f || (!(f.home && f.home.length) && !(f.away && f.away.length))) return '';
+  const team = (name, arr) => `<div class="fcol"><div class="fcol-team">${name || ''}</div>${srFormRows(arr)}</div>`;
   return `<div class="sr-sec">SON 5 MAÇ</div>
-    <div class="sr-form">
-      <div class="sr-form-row"><span class="sr-fteam">${f.homeTeam || ''}</span><span class="sr-fdots">${srFormChips(f.home)}</span></div>
-      <div class="sr-form-row"><span class="sr-fteam">${f.awayTeam || ''}</span><span class="sr-fdots">${srFormChips(f.away)}</span></div>
+    <div class="sr-form2">
+      ${team(f.homeTeam, f.home)}
+      ${team(f.awayTeam, f.away)}
     </div>
-    <div class="sr-formlegend"><span><i class="form-dot g">G</i>Galibiyet</span><span><i class="form-dot b">B</i>Beraberlik</span><span><i class="form-dot m">M</i>Mağlubiyet</span><span class="sr-formhint">tüm turnuvalar · en solda en yeni</span></div>`;
+    <div class="sr-formlegend"><span><i class="form-dot g">G</i>Galibiyet</span><span><i class="form-dot b">B</i>Beraberlik</span><span><i class="form-dot m">M</i>Mağlubiyet</span><span class="sr-formhint">tüm turnuvalar · en üstte en yeni</span></div>`;
 }
 function srLastName(n) { const p = String(n || '').trim().split(/\s+/); return p[p.length - 1] || ''; }
 function srParseFormation(f) { return String(f || '').split(/[^0-9]+/).map((x) => parseInt(x, 10)).filter((x) => x > 0); }
@@ -1071,38 +1231,69 @@ function srXiList(team, formation, players) {
     ${list ? `<ol class="sr-xi-list">${list}</ol>` : '<div class="form-na">veri yok</div>'}
   </div>`;
 }
-// Dizilişe göre oyuncuları SAHA üzerinde konumlandırır (kaleci altta, forvet üstte).
-function srPitch(team, formation, players, srcTag) {
+// Rating renk skalasi: dusuk=kirmizi, orta=sari, yuksek=yesil (max/min'e gore).
+function srRatScale(...arrs) {
+  const v = [];
+  arrs.forEach((a) => (a || []).forEach((p) => { const r = p && p.rating != null ? Number(p.rating) : NaN; if (!isNaN(r)) v.push(r); }));
+  if (!v.length) return null;
+  return { mn: Math.min(...v), mx: Math.max(...v) };
+}
+function srRatColor(rating, sc) {
+  if (rating == null) return null;
+  const v = Number(rating); if (isNaN(v)) return null;
+  let t = (sc && sc.mx > sc.mn) ? (v - sc.mn) / (sc.mx - sc.mn) : 1;
+  t = Math.max(0, Math.min(1, t));
+  const hue = 4 + t * (132 - 4); // 4=kirmizi → 132=yesil
+  return `hsl(${Math.round(hue)},68%,42%)`;
+}
+// Bir oyuncu karti (foto + numara/isim + renkli okunakli rating) — PL sitesi tarzi.
+function srFCard(p, sc) {
+  const name = typeof p === 'string' ? p : (p && p.name) || '';
+  const code = p && p.code;
+  const img = code ? `<img class="pf-ph" src="https://resources.premierleague.com/premierleague/photos/players/110x140/p${code}.png" loading="lazy" alt="" onerror="this.remove()">` : '';
+  const col = srRatColor(p && p.rating, sc);
+  const rat = (p && p.rating != null) ? `<div class="pf-rt" style="background:${col || '#12a05c'}">${p.rating}</div>` : '';
+  const num = (p && p.num) ? `<span class="pf-no">${p.num}</span> ` : '';
+  return `<div class="pf-ph-wrap">${img}</div>${rat}<div class="pf-nm">${num}${name}</div>`;
+}
+// Bir takimin oyuncularini dizilise gore satirlara + y konumlarina ayirir.
+// top=true → kaleci en ustte (ev sahibi, asagi hucum); top=false → kaleci en altta (deplasman, yukari hucum).
+function srPitchRows(players, formation, top) {
   const lines = srParseFormation(formation);
-  const outfield = lines.reduce((a, b) => a + b, 0);
   const pl = players || [];
-  // Diziliş çözülemiyorsa (toplam 10 değil veya 11 oyuncu yok) liste görünümüne düş.
-  if (outfield !== 10 || pl.length < 11) return srXiList(team, formation, players);
-  const tag = srcTag === 'ai' ? '<span class="sr-src-tag ai">AI tahmini</span>' : srcTag === 'fpl' ? '<span class="sr-src-tag ok">güncel</span>' : '';
-  const rows = [[pl[0]]]; let idx = 1;
-  for (const k of lines) { rows.push(pl.slice(idx, idx + k)); idx += k; }
+  if (lines.reduce((a, b) => a + b, 0) !== 10 || pl.length < 11) return null;
+  const gk = pl[0]; let idx = 1; const bands = [];
+  for (const k of lines) { bands.push(pl.slice(idx, idx + k)); idx += k; } // [D, O, F]
+  const rows = top ? [[gk], ...bands] : [...bands.slice().reverse(), [gk]];
   const n = rows.length;
+  const y0 = top ? 6 : 57, y1 = top ? 43 : 92;
+  return rows.map((row, i) => ({ y: y0 + i * ((y1 - y0) / (n - 1)), row }));
+}
+// Iki takimi TEK saha uzerinde gosterir (beyaz saha — PL sitesi gibi).
+function srPitchBoth(l) {
+  const homeRows = srPitchRows(l.home, l.homeFormation, true);
+  const awayRows = srPitchRows(l.away, l.awayFormation, false);
+  if (!homeRows || !awayRows) return null;
+  const sc = srRatScale(l.home, l.away);
   let chips = '';
-  rows.forEach((row, i) => {
-    const top = 90 - i * (80 / (n - 1));
-    row.forEach((name, j) => {
-      const left = (j + 1) / (row.length + 1) * 100;
-      chips += `<div class="pl" style="left:${left}%;top:${top}%"><span class="pl-dot"></span><span class="pl-nm">${srLastName(name)}</span></div>`;
-    });
-  });
-  const svg = '<svg class="pl-lines" viewBox="0 0 100 150" preserveAspectRatio="none">'
-    + '<rect x="1" y="1" width="98" height="148" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="0.6"/>'
-    + '<line x1="1" y1="75" x2="99" y2="75" stroke="rgba(255,255,255,.5)" stroke-width="0.6"/>'
-    + '<circle cx="50" cy="75" r="11" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="0.6"/>'
-    + '<rect x="28" y="1" width="44" height="20" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="0.6"/>'
-    + '<rect x="28" y="129" width="44" height="20" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="0.6"/></svg>';
-  return `<div class="sr-pitch-col">
-    <div class="sr-xi-team">${team || ''}${formation ? ` <span class="sr-xi-form">${formation}</span>` : ''}${tag}</div>
-    <div class="sr-pitch">${svg}${chips}</div>
-  </div>`;
+  const place = (rows) => rows.forEach(({ y, row }) => row.forEach((p, j) => {
+    const left = (j + 1) / (row.length + 1) * 100;
+    chips += `<div class="pf" style="left:${left}%;top:${y}%">${srFCard(p, sc)}</div>`;
+  }));
+  place(homeRows); place(awayRows);
+  const L = 'rgba(15,20,40,.10)';
+  const svg = `<svg class="pf-lines" viewBox="0 0 100 160" preserveAspectRatio="none">`
+    + `<rect x="1" y="1" width="98" height="158" fill="none" stroke="${L}" stroke-width="0.5"/>`
+    + `<line x1="1" y1="80" x2="99" y2="80" stroke="${L}" stroke-width="0.5"/>`
+    + `<circle cx="50" cy="80" r="12" fill="none" stroke="${L}" stroke-width="0.5"/>`
+    + `<rect x="26" y="1" width="48" height="22" fill="none" stroke="${L}" stroke-width="0.5"/>`
+    + `<rect x="40" y="1" width="20" height="9" fill="none" stroke="${L}" stroke-width="0.5"/>`
+    + `<rect x="26" y="137" width="48" height="22" fill="none" stroke="${L}" stroke-width="0.5"/>`
+    + `<rect x="40" y="150" width="20" height="9" fill="none" stroke="${L}" stroke-width="0.5"/></svg>`;
+  return `<div class="sr-fpitch">${svg}${chips}</div>`;
 }
 // Pozisyona göre gruplu OKUNAKLI liste (kaleci/defans/orta/forvet).
-function srLineupList(team, formation, players, srcTag) {
+function srLineupList(team, formation, players, srcTag, sc) {
   const pl = (players || []).filter(Boolean);
   const tag = srcTag === 'ai' ? '<span class="sr-src-tag ai">AI tahmini</span>'
     : srcTag === 'fpl' ? '<span class="sr-src-tag ok">güncel</span>' : '';
@@ -1110,23 +1301,41 @@ function srLineupList(team, formation, players, srcTag) {
   if (pl.length < 11) return `<div class="sr-xi-col">${head}<div class="form-na">veri yok</div></div>`;
   const lines = srParseFormation(formation);
   const gk = pl[0]; let idx = 1;
-  const labels = ['Defans', 'Orta Saha', 'Forvet'];
-  const rows = [['Kaleci', [gk]]];
-  lines.forEach((k, i) => { rows.push([labels[i] || 'Oyuncular', pl.slice(idx, idx + k)]); idx += k; });
-  const body = rows.filter((r) => r[1].length).map(([lab, names]) =>
-    `<div class="sr-ll-row"><span class="sr-ll-k">${lab}</span><span class="sr-ll-v">${names.join(' · ')}</span></div>`).join('');
-  return `<div class="sr-xi-col">${head}<div class="sr-ll">${body}</div></div>`;
+  const pos = ['D', 'O', 'F']; // Defans / Orta Saha / Forvet
+  const rows = [['K', gk]]; // her oyuncu AYRI satır
+  lines.forEach((k, i) => { pl.slice(idx, idx + k).forEach((n) => rows.push([pos[i] || '-', n])); idx += k; });
+  const body = rows.map(([p, n]) => {
+    const name = typeof n === 'string' ? n : (n && n.name) || '';
+    const col = srRatColor(n && n.rating, sc);
+    const rating = (n && n.rating != null) ? `<span class="pl-rat" style="background:${col || '#12a05c'}">${n.rating}</span>` : '';
+    return `<div class="pl-row"><span class="pl-pos">${p}</span><span class="pl-name">${name}</span>${rating}</div>`;
+  }).join('');
+  return `<div class="sr-xi-col">${head}<div class="pl-list">${body}</div></div>`;
 }
 function srLineups(l) {
   if (!l || (!(l.home && l.home.length) && !(l.away && l.away.length))) return '';
   const hs = l.homeSrc || (l.src === 'ai' ? 'ai' : 'fpl');
   const as = l.awaySrc || (l.src === 'ai' ? 'ai' : 'fpl');
-  return `<div class="sr-sec">MUHTEMEL İLK 11 <span class="sr-xi-tag">kesin değil</span></div>
-    <div class="sr-lineups">
-      ${srLineupList(l.homeTeam, l.homeFormation, l.home, hs)}
-      ${srLineupList(l.awayTeam, l.awayFormation, l.away, as)}
-    </div>
-    <div class="sr-note">Resmi FPL kadrosundan (bu sezon en çok oynayanlar) kuruldu; pozisyonlar FPL'ye göre gruplanmıştır. Tahmini kadrodur; kesin 11 maçtan ~1 saat önce belli olur.</div>`;
+  const head = `<div class="sr-sec">MUHTEMEL İLK 11 <span class="sr-xi-tag">kesin değil</span></div>`;
+  const note = `<div class="sr-note">Resmi FPL kadrosundan (bu sezon en çok oynayanlar) kuruldu. Diziliş <b>yaklaşıktır</b> (oyuncular doğru, tam mevkiler tahmini). Oyuncunun altındaki renkli rozet = <b>FPL form</b> — bu maçtaki oyuncular arasında <b style="color:#128a4e">yüksek=yeşil</b>, <b style="color:#c0392b">düşük=kırmızı</b> (son maçların ort. fantezi puanı; gerçek maç rating'i değildir). Kesin 11 maçtan ~1 saat önce belli olur.</div>`;
+  const sc = srRatScale(l.home, l.away);
+  const legend = sc ? `<div class="sr-ratleg"><span class="rl-t">FPL form</span><span class="rl-v">${sc.mn.toFixed(1)}</span><i class="rl-bar"></i><span class="rl-v">${sc.mx.toFixed(1)}</span></div>` : '';
+  const both = srPitchBoth(l);
+  if (both) {
+    const hform = l.homeFormation ? ` <span class="ft-form">${l.homeFormation}</span>` : '';
+    const aform = l.awayFormation ? ` <span class="ft-form">${l.awayFormation}</span>` : '';
+    return head
+      + `<div class="ft-hd ft-top"><span class="ft-nm">${l.homeTeam || ''}</span>${hform}</div>`
+      + both
+      + `<div class="ft-hd ft-bot"><span class="ft-nm">${l.awayTeam || ''}</span>${aform}</div>`
+      + legend
+      + note;
+  }
+  // Diziliş çözülemezse okunaklı liste görünümü.
+  return head
+    + `<div class="sr-lineups">${srLineupList(l.homeTeam, l.homeFormation, l.home, hs, sc)}${srLineupList(l.awayTeam, l.awayFormation, l.away, as, sc)}</div>`
+    + legend
+    + note;
 }
 function sahaReportHtml(r, m) {
   if (!r) return '';
@@ -1395,7 +1604,7 @@ function playerRow(u, rank, leadBal) {
       <div class="prow-left">
         <div class="rank ${medal}">${rank}</div>
         <div class="pinfo">
-          <div class="uname">${u.username}${u.is_admin ? '<span class="admin-tag">admin</span>' : ''}${elim}${you}${Number(u.leader_total_days) >= 1 ? `<span class="lead-badge" title="Toplam liderlik süresi"><span class="logo-ico cat-bg"></span>${u.leader_total_days}g</span>` : ''}</div>
+          <div class="uname">${u.username}${u.is_admin ? '<span class="admin-tag">admin</span>' : ''}${elim}${you}${Number(u.leader_total_days) >= 1 ? `<span class="lead-badge" title="Toplam liderlik süresi"><span class="logo-ico cat-bg"></span>${u.leader_total_days}g</span>` : ''}${Number(u.last_total_days) >= 1 ? `<span class="last-badge" title="Toplam sonunculuk süresi">${BUCKET_SVG}${u.last_total_days}g</span>` : ''}</div>
           <div class="pgap">Lidere fark: <b>-${fmtTL(gap)}</b></div>
         </div>
       </div>
@@ -1541,6 +1750,46 @@ async function renderPuan(el) {
 }
 
 // ----- Sonuclar -----
+function goalNames(list) {
+  return (list || []).map((x) => (x.n > 1 ? `${x.name} (${x.n})` : x.name)).join(', ');
+}
+function sonucDetail(m) {
+  const voided = m.status === 'void';
+  if (voided) return '<div class="rd-row"><span class="rd-k">Durum</span><span class="rd-v">Maç iptal edildi</span></div>';
+  const hasIY = m.ht_home != null && m.ht_away != null;
+  const iy = hasIY ? `${m.ht_home} - ${m.ht_away}` : '—';
+  const sh = hasIY ? `${m.home_score - m.ht_home} - ${m.away_score - m.ht_away}` : '—';
+  const g = m.goals;
+  // Ev sahibi golleri = ev golcüleri + deplasman kendi kalesine; tam tersi deplasman için.
+  const homeScorers = g ? [...(g.homeGoals || []), ...(g.awayOG || []).map((x) => ({ name: `${x.name} (k.k.)`, n: x.n }))] : [];
+  const awayScorers = g ? [...(g.awayGoals || []), ...(g.homeOG || []).map((x) => ({ name: `${x.name} (k.k.)`, n: x.n }))] : [];
+  let goalsBlock = '';
+  if (g) {
+    const hg = goalNames(homeScorers), ag = goalNames(awayScorers);
+    const ha = goalNames(g.homeAssists), aa = goalNames(g.awayAssists);
+    goalsBlock =
+      `<div class="rd-goals">
+        <div class="rd-team">
+          <div class="rd-tn">${m.home_team}</div>
+          <div class="rd-line"><span class="rd-ico">⚽</span> ${hg || '<i>gol yok</i>'}</div>
+          ${ha ? `<div class="rd-line rd-ast"><span class="rd-ico">🅰️</span> ${ha}</div>` : ''}
+        </div>
+        <div class="rd-team">
+          <div class="rd-tn">${m.away_team}</div>
+          <div class="rd-line"><span class="rd-ico">⚽</span> ${ag || '<i>gol yok</i>'}</div>
+          ${aa ? `<div class="rd-line rd-ast"><span class="rd-ico">🅰️</span> ${aa}</div>` : ''}
+        </div>
+      </div>
+      <div class="rd-note">Golcü ve asist: resmi FPL verisi · gol dakikası ücretsiz kaynakta yok</div>`;
+  } else {
+    goalsBlock = '<div class="rd-note">Golcü/asist bilgisi henüz gelmedi (FPL maçı işledikçe otomatik dolar).</div>';
+  }
+  return `<div class="rd-scores">
+      <span class="rd-chip">İY <b>${iy}</b></span>
+      <span class="rd-chip">2.Y <b>${sh}</b></span>
+      <span class="rd-chip rd-ms">MS <b>${m.home_score} - ${m.away_score}</b></span>
+    </div>${goalsBlock}`;
+}
 async function renderSonuclar(el) {
   const { matches } = await api('/matches/results');
   if (!matches.length) {
@@ -1548,30 +1797,39 @@ async function renderSonuclar(el) {
     return;
   }
   el.innerHTML =
-    `<div class="section-title">Sonuçlar <small>son maçlar</small></div>` +
+    `<div class="section-title">Sonuçlar <small>son maçlar · dokun, detay açılsın</small></div>` +
     matches
-      .map((m) => {
+      .map((m, i) => {
         const voided = m.status === 'void';
         const score = voided ? 'İPTAL' : `${m.home_score} - ${m.away_score}`;
         const hasIY = m.ht_home != null && m.ht_away != null;
         const iy = voided
           ? ''
           : `<div class="iy-line">İY: ${hasIY ? `<b>${m.ht_home} - ${m.ht_away}</b>` : '<span class="iy-missing">—</span>'}</div>`;
-        return `<div class="match">
-          <div class="fixture">
-            <div class="teams-col">
-              <div class="team-row">${crestEl(m.home_team)}<span class="team-name">${m.home_team}</span></div>
-              <div class="team-row">${crestEl(m.away_team)}<span class="team-name">${m.away_team}</span></div>
+        return `<div class="match res-card">
+          <div class="res-head" data-ri="${i}">
+            <div class="fixture">
+              <div class="teams-col">
+                <div class="team-row">${crestEl(m.home_team)}<span class="team-name">${m.home_team}</span></div>
+                <div class="team-row">${crestEl(m.away_team)}<span class="team-name">${m.away_team}</span></div>
+              </div>
+              <div class="score-col">
+                <div class="kick" style="font-size:20px;font-weight:800;color:${voided ? 'var(--muted)' : 'var(--pri)'}">${score}</div>
+                ${iy}
+              </div>
             </div>
-            <div class="score-col">
-              <div class="kick" style="font-size:20px;font-weight:800;color:${voided ? 'var(--muted)' : 'var(--pri)'}">${score}</div>
-              ${iy}
-            </div>
+            <div class="res-head-b"><span class="market-label">${fmtDate(m.commence_time)}</span><span class="res-arrow" aria-hidden="true">▾</span></div>
           </div>
-          <div class="market-label" style="margin-top:8px">${fmtDate(m.commence_time)}</div>
+          <div class="res-detail" id="rd-${i}" hidden>${sonucDetail(m)}</div>
         </div>`;
       })
       .join('');
+  $$('.res-head', el).forEach((h) => h.addEventListener('click', () => {
+    const card = h.closest('.res-card');
+    const d = $('#rd-' + h.dataset.ri, el);
+    const open = card.classList.toggle('open');
+    d.hidden = !open;
+  }));
 }
 
 // ----- Admin -----
