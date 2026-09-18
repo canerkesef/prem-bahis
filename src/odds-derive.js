@@ -158,6 +158,24 @@ function computeMarkets(base) {
     'yok-alt': price(P((i, j) => !(i > 0 && j > 0) && i + j < 3)),
   };
 
+  // --- Ilk Yari / Mac Sonu (İY/MS) ---
+  // 1. yari ~%45, 2. yari ~%55 beklenti; bagimsiz Poisson. Toplam = tam maca esit (tutarli).
+  // Ortak olasilik: her (1.yari skoru, 2.yari skoru) ciftinden İY sonucu ve MS sonucu.
+  const H1 = makeP(lh * 0.45, la * 0.45).M;
+  const H2 = makeP(lh * 0.55, la * 0.55).M;
+  const iymsP = { '1/1': 0, '1/X': 0, '1/2': 0, 'X/1': 0, 'X/X': 0, 'X/2': 0, '2/1': 0, '2/X': 0, '2/2': 0 };
+  for (let h1 = 0; h1 <= MAX; h1++) for (let a1 = 0; a1 <= MAX; a1++) {
+    const p1 = H1[h1][a1]; if (!p1) continue;
+    const htR = resOf(h1, a1);
+    for (let h2 = 0; h2 <= MAX; h2++) for (let a2 = 0; a2 <= MAX; a2++) {
+      const p = p1 * H2[h2][a2]; if (!p) continue;
+      iymsP[`${htR}/${resOf(h1 + h2, a1 + a2)}`] += p;
+    }
+  }
+  const iyms = {};
+  for (const k of Object.keys(iymsP)) iyms[k] = price(iymsP[k], 0.14);
+  mk.iyms = iyms;
+
   // --- Kesin Skor ---
   const cs = {};
   let listed = 0;

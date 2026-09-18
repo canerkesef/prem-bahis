@@ -18,6 +18,15 @@ async function recomputeEliminations(tx) {
     WHERE u.status = 'approved'`;
 }
 
+// İY/MS (ilk yari / mac sonu kombinasyonu): HEM devre HEM mac sonu sonucu tutmali.
+// sel: 'HT/FT' (or. '1/1', 'X/2'). Kazanan icin iki skor da gerekir.
+function iymsWinner(sel, htH, htA, ftH, ftA) {
+  const parts = String(sel).split('/');
+  if (parts.length !== 2) return false;
+  const r = (h, a) => (h > a ? '1' : h === a ? 'X' : '2');
+  return parts[0] === r(htH, htA) && parts[1] === r(ftH, ftA);
+}
+
 // Bir kuponun (market + selection) verilen skora gore kazanip kazanmadigi.
 // Ilk yari (iy_) pazarlari icin cagiran taraf DEVRE skorunu verir; mantik aynidir.
 function isWinner(market, sel, h, a) {
@@ -106,15 +115,18 @@ async function settleMatch(matchId, homeScore, awayScore, htHome = null, htAway 
 
     for (const c of coupons) {
       const isIY = c.market.startsWith('iy_');
-      if (isIY && !haveHT) {
-        // Devre skoru bilinmiyor -> ilk yari kuponu iade (bahis geri)
+      const isIYMS = c.market === 'iyms';
+      if ((isIY || isIYMS) && !haveHT) {
+        // Devre skoru bilinmiyor -> ilk yari / İY-MS kuponu iade (bahis geri)
         await tx`UPDATE coupons SET status='void', settled_at=now() WHERE id=${c.id}`;
         await tx`UPDATE users SET balance = balance + ${c.stake} WHERE id=${c.user_id}`;
         continue;
       }
-      const won = isIY
-        ? isWinner(c.market, c.selection, htHome, htAway)
-        : isWinner(c.market, c.selection, homeScore, awayScore);
+      const won = isIYMS
+        ? iymsWinner(c.selection, htHome, htAway, homeScore, awayScore)
+        : isIY
+          ? isWinner(c.market, c.selection, htHome, htAway)
+          : isWinner(c.market, c.selection, homeScore, awayScore);
       if (won) {
         await tx`UPDATE coupons SET status='won', settled_at=now() WHERE id=${c.id}`;
         await tx`UPDATE users SET balance = balance + ${c.potential_win} WHERE id=${c.user_id}`;
@@ -146,20 +158,24 @@ async function settleMatch(matchId, homeScore, awayScore, htHome = null, htAway 
 // Mac sonu kuponlarina dokunmaz. Skor stored FT ile ayni kalir.
 async function applyHalfTime(matchId, htHome, htAway) {
   if (!Number.isInteger(htHome) || !Number.isInteger(htAway)) return { ok: false, error: 'Devre skoru gecersiz' };
-  const rows = await sql`SELECT status, ht_home FROM matches WHERE id=${matchId}`;
+  const rows = await sql`SELECT status, ht_home, home_score, away_score FROM matches WHERE id=${matchId}`;
   if (!rows.length) return { ok: false, error: 'Mac bulunamadi' };
   if (rows[0].status !== 'settled') return { ok: false, error: 'Mac sonuclanmamis' };
   if (rows[0].ht_home != null) return { ok: false, error: 'Ilk yari zaten islenmis' };
+  const ftH = rows[0].home_score, ftA = rows[0].away_score;
 
   let iyCount = 0;
   await sql.begin(async (tx) => {
     const iy = await tx`
       SELECT id, user_id, market, selection, stake, potential_win
-      FROM coupons WHERE match_id=${matchId} AND market LIKE 'iy_%' AND status='void'`;
+      FROM coupons WHERE match_id=${matchId} AND (market LIKE 'iy_%' OR market='iyms') AND status='void'`;
     for (const c of iy) {
       // Onceki iadeyi geri al, sonra devre skoruna gore hesapla.
       await tx`UPDATE users SET balance = GREATEST(balance - ${c.stake}, 0) WHERE id=${c.user_id}`;
-      if (isWinner(c.market, c.selection, htHome, htAway)) {
+      const cWon = c.market === 'iyms'
+        ? iymsWinner(c.selection, htHome, htAway, ftH, ftA)
+        : isWinner(c.market, c.selection, htHome, htAway);
+      if (cWon) {
         await tx`UPDATE coupons SET status='won', settled_at=now() WHERE id=${c.id}`;
         await tx`UPDATE users SET balance = balance + ${c.potential_win} WHERE id=${c.user_id}`;
       } else {

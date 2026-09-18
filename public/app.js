@@ -148,6 +148,10 @@ const MARKET_GROUPS = [
       ['1-yok', '1 & Yok'], ['X-yok', 'X & Yok'], ['2-yok', '2 & Yok']] },
     { key: 'btts_ou25', label: 'KG + Alt/Üst 2.5', cols: 2, sels: [
       ['var-ust', 'Var & Üst'], ['var-alt', 'Var & Alt'], ['yok-ust', 'Yok & Üst'], ['yok-alt', 'Yok & Alt']] },
+    { key: 'iyms', label: 'İlk Yarı / Maç Sonu', cols: 3, sels: [
+      ['1/1', 'İY 1 / MS 1'], ['1/X', 'İY 1 / MS X'], ['1/2', 'İY 1 / MS 2'],
+      ['X/1', 'İY X / MS 1'], ['X/X', 'İY X / MS X'], ['X/2', 'İY X / MS 2'],
+      ['2/1', 'İY 2 / MS 1'], ['2/X', 'İY 2 / MS X'], ['2/2', 'İY 2 / MS 2']] },
   ] },
   { title: 'Kesin Skor', open: false, markets: [
     { key: 'cs', label: 'Kesin Skor', cols: 3, sels: CS_LIST },
@@ -523,10 +527,13 @@ function marketsHtml(m) {
     const inner = g.markets
       .map((mk) => {
         const mo = o[mk.key] || {};
+        // Bu maçta bu pazar için hiç oran yoksa (ör. eski maç, henüz güncellenmedi) gösterme.
+        if (!Object.values(mo).some((v) => v)) return '';
         const btns = mk.sels.map(([sel, lab]) => oddBtn(m.id, mk.key, sel, lab, mo[sel])).join('');
         return `<div class="market"><div class="market-label">${mk.label}</div><div class="odds-row c${mk.cols}">${btns}</div></div>`;
       })
       .join('');
+    if (!inner) return ''; // grupta gösterilecek pazar yoksa grubu da gizle
     return `<div class="mgroup ${g.open ? 'open' : ''}">
       <button type="button" class="mgroup-head">${g.title}<span class="mg-ico">▾</span></button>
       <div class="mgroup-body">${inner}</div>
