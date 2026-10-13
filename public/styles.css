@@ -539,3 +539,19 @@ input{font-family:inherit}
 .an-dot{width:10px;height:10px;border-radius:3px;display:inline-block}
 .an-dot.pos{background:#12a05c}.an-dot.neg{background:#d92b2b;margin-left:6px}
 .an-note{margin-left:auto;font-weight:600;opacity:.8}
+
+/* Analiz — isabet oranı çubuğu + trend oku */
+.an-pl-val .an-arrow{font-size:17px;margin-right:4px;vertical-align:2px}
+.an-ratio{margin-top:10px}
+.an-rbar{display:flex;height:12px;border-radius:7px;overflow:hidden;background:#ede6f4;border:1px solid var(--line)}
+.an-seg{height:100%}
+.an-seg.won{background:#12a05c}
+.an-seg.lost{background:#d92b2b}
+.an-seg.pend{background:#b9a7d6}
+.an-seg+.an-seg{box-shadow:inset 2px 0 0 #fff}
+.an-rleg{display:flex;flex-wrap:wrap;gap:12px;margin-top:6px;font-size:11px;font-weight:700;color:var(--muted)}
+.an-rk{position:relative;padding-left:14px}
+.an-rk::before{content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);width:9px;height:9px;border-radius:3px}
+.an-rk.won::before{background:#12a05c}
+.an-rk.lost::before{background:#d92b2b}
+.an-rk.pend::before{background:#b9a7d6}

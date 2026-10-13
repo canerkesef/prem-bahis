@@ -547,6 +547,22 @@ input{font-family:inherit}
 .an-dot.pos{background:#12a05c}.an-dot.neg{background:#d92b2b;margin-left:6px}
 .an-note{margin-left:auto;font-weight:600;opacity:.8}
 
+/* Analiz — isabet oranı çubuğu + trend oku */
+.an-pl-val .an-arrow{font-size:17px;margin-right:4px;vertical-align:2px}
+.an-ratio{margin-top:10px}
+.an-rbar{display:flex;height:12px;border-radius:7px;overflow:hidden;background:#ede6f4;border:1px solid var(--line)}
+.an-seg{height:100%}
+.an-seg.won{background:#12a05c}
+.an-seg.lost{background:#d92b2b}
+.an-seg.pend{background:#b9a7d6}
+.an-seg+.an-seg{box-shadow:inset 2px 0 0 #fff}
+.an-rleg{display:flex;flex-wrap:wrap;gap:12px;margin-top:6px;font-size:11px;font-weight:700;color:var(--muted)}
+.an-rk{position:relative;padding-left:14px}
+.an-rk::before{content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);width:9px;height:9px;border-radius:3px}
+.an-rk.won::before{background:#12a05c}
+.an-rk.lost::before{background:#d92b2b}
+.an-rk.pend::before{background:#b9a7d6}
+
 </style>
 </head>
 <body class="loading">
@@ -1630,25 +1646,25 @@ function anGwOf(t, bounds) {
   for (const b of bounds) if (b.end >= tt) return b.id;
   return bounds.length ? bounds[bounds.length - 1].id : null;
 }
-async function renderAnaliz(el) {
-  const [cRes, gRes] = await Promise.all([
-    api('/coupons/mine'),
-    api('/gameweeks').catch(() => null),
-  ]);
-  const coupons = (cRes && cRes.coupons) || [];
-  const name = ME.username;
-  if (!coupons.length) {
-    el.innerHTML = `<div class="section-title">Analizim</div><div class="empty">Henüz kupon yok — Bülten'den kupon yapınca kâr/zarar analizin burada otomatik oluşur.</div>`;
-    return;
-  }
-  // Hafta = Premier Lig haftası (gameweek). FPL verisi yoksa takvim haftasına (Pzt–Paz) düş.
+// Tuttu/Yattı/Bekleyen oranını yatay bir çubukta göster.
+function anRatioBar(s) {
+  const tot = s.won + s.lost + s.pending;
+  if (!tot) return '';
+  const pw = s.won / tot * 100, pl = s.lost / tot * 100, pp = s.pending / tot * 100;
+  const seg = (w, c) => (w > 0 ? `<span class="an-seg ${c}" style="width:${w}%"></span>` : '');
+  return `<div class="an-ratio">
+    <div class="an-rbar">${seg(pw, 'won')}${seg(pl, 'lost')}${seg(pp, 'pend')}</div>
+    <div class="an-rleg"><span class="an-rk won">${s.won} tuttu</span><span class="an-rk lost">${s.lost} yattı</span>${s.pending ? `<span class="an-rk pend">${s.pending} bekliyor</span>` : ''}</div>
+  </div>`;
+}
+// Bir oyuncunun kuponlarından analiz kartlarını (bu hafta / genel / grafik) üretir — hem kendi hem başka oyuncu için.
+function analysisCards(coupons, gRes) {
   const useGw = !!(gRes && gRes.ok && gRes.events && gRes.events.length);
   const gwIdx = useGw ? anGwIndex(gRes) : null;
   const keyOf = (c) => (useGw ? anGwOf(c.commence_time, gwIdx.bounds) : +anWeekStart(c.commence_time));
   const curKey = useGw ? gwIdx.currentId : +anWeekStart(new Date());
   const weekCoupons = coupons.filter((c) => keyOf(c) === curKey);
   const w = anScope(weekCoupons), a = anScope(coupons);
-  // Grafik: son 8 hafta (PL haftası ya da takvim).
   let weeks;
   if (useGw) {
     const ids = gwIdx.bounds.map((b) => b.id);
@@ -1665,33 +1681,39 @@ async function renderAnaliz(el) {
     weeks = arr.map((x) => ({ label: x.label, sub: `${x.label} haftası`, profit: x.profit, won: x.won, lost: x.lost }));
   }
   const cls = (p) => (p > 0 ? 'pos' : p < 0 ? 'neg' : 'zero');
+  const arr = (p) => (p > 0 ? '▲' : p < 0 ? '▼' : '•');
   const plv = (p) => `${p > 0 ? '+' : p < 0 ? '−' : ''}${anMoney(Math.abs(p))}`;
   const weekSub = useGw ? `${curKey}. PL haftası` : `${anWeekStart(new Date()).toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' })} haftası`;
   const chartSub = useGw ? 'son 8 PL haftası' : 'son 8 hafta';
   const chartNote = useGw ? 'Premier Lig haftasına göre · bekleyen kuponlar sayılmaz' : 'maç tarihine göre · bekleyen kuponlar sayılmaz';
-  el.innerHTML =
-    `<div class="section-title">Analizim <small>${name}</small></div>`
+  return `<div class="an-card">
+      <div class="an-head">BU HAFTA <span class="an-sub">${weekSub}</span></div>
+      <div class="an-pl ${cls(w.profit)}"><span class="an-pl-lbl">Kâr / Zarar</span><span class="an-pl-val"><span class="an-arrow">${arr(w.profit)}</span>${plv(w.profit)} <small>ASCU</small></span></div>
+      <div class="an-tiles">${anTile('Kupon', w.total)}${anTile('Tuttu', w.won, 'ok')}${anTile('Yattı', w.lost, 'no')}${anTile('Bekleyen', w.pending, 'wait')}</div>
+      ${anRatioBar(w)}
+      <div class="an-mini">Yatırılan <b>${fmtTL(w.staked)}</b> · Dönen <b>${fmtTL(w.returned)}</b> · İsabet <b>%${w.winRate}</b></div>
+    </div>`
     + `<div class="an-card">
-        <div class="an-head">BU HAFTA <span class="an-sub">${weekSub}</span></div>
-        <div class="an-pl ${cls(w.profit)}"><span class="an-pl-lbl">Kâr / Zarar</span><span class="an-pl-val">${plv(w.profit)} <small>ASCU</small></span></div>
-        <div class="an-tiles">
-          ${anTile('Kupon', w.total)}${anTile('Tuttu', w.won, 'ok')}${anTile('Yattı', w.lost, 'no')}${anTile('Bekleyen', w.pending, 'wait')}
-        </div>
-        <div class="an-mini">Yatırılan <b>${fmtTL(w.staked)}</b> · Dönen <b>${fmtTL(w.returned)}</b> · İsabet <b>%${w.winRate}</b></div>
-      </div>`
+      <div class="an-head">GENEL <span class="an-sub">tüm zamanlar</span></div>
+      <div class="an-pl ${cls(a.profit)}"><span class="an-pl-lbl">Toplam Kâr / Zarar</span><span class="an-pl-val"><span class="an-arrow">${arr(a.profit)}</span>${plv(a.profit)} <small>ASCU</small></span></div>
+      <div class="an-tiles">${anTile('Kupon', a.total)}${anTile('Tuttu', a.won, 'ok')}${anTile('Yattı', a.lost, 'no')}${anTile('İsabet', '%' + a.winRate)}</div>
+      ${anRatioBar(a)}
+      <div class="an-mini">Yatırılan <b>${fmtTL(a.staked)}</b> · Dönen <b>${fmtTL(a.returned)}</b> · En iyi tutturulan oran <b>${a.bestOdd ? a.bestOdd.toFixed(2) : '—'}</b></div>
+    </div>`
     + `<div class="an-card">
-        <div class="an-head">GENEL <span class="an-sub">tüm zamanlar</span></div>
-        <div class="an-pl ${cls(a.profit)}"><span class="an-pl-lbl">Toplam Kâr / Zarar</span><span class="an-pl-val">${plv(a.profit)} <small>ASCU</small></span></div>
-        <div class="an-tiles">
-          ${anTile('Kupon', a.total)}${anTile('Tuttu', a.won, 'ok')}${anTile('Yattı', a.lost, 'no')}${anTile('İsabet', '%' + a.winRate)}
-        </div>
-        <div class="an-mini">Yatırılan <b>${fmtTL(a.staked)}</b> · Dönen <b>${fmtTL(a.returned)}</b> · En iyi tutturulan oran <b>${a.bestOdd ? a.bestOdd.toFixed(2) : '—'}</b></div>
-      </div>`
-    + `<div class="an-card">
-        <div class="an-head">HAFTALIK KÂR / ZARAR <span class="an-sub">${chartSub}</span></div>
-        ${anBarsHtml(weeks)}
-        <div class="an-legend"><span class="an-dot pos"></span>Kâr <span class="an-dot neg"></span>Zarar <span class="an-note">${chartNote}</span></div>
-      </div>`;
+      <div class="an-head">HAFTALIK KÂR / ZARAR <span class="an-sub">${chartSub}</span></div>
+      ${anBarsHtml(weeks)}
+      <div class="an-legend"><span class="an-dot pos"></span>Kâr <span class="an-dot neg"></span>Zarar <span class="an-note">${chartNote}</span></div>
+    </div>`;
+}
+async function renderAnaliz(el) {
+  const [cRes, gRes] = await Promise.all([api('/coupons/mine'), api('/gameweeks').catch(() => null)]);
+  const coupons = (cRes && cRes.coupons) || [];
+  if (!coupons.length) {
+    el.innerHTML = `<div class="section-title">Analizim</div><div class="empty">Henüz kupon yok — Bülten'den kupon yapınca kâr/zarar analizin burada otomatik oluşur.</div>`;
+    return;
+  }
+  el.innerHTML = `<div class="section-title">Analizim <small>${ME.username}</small></div>` + analysisCards(coupons, gRes);
 }
 
 
@@ -1805,8 +1827,10 @@ async function renderKullanicilar(el) {
 async function renderUserDetail(uid) {
   const el = $('#view');
   el.innerHTML = '<div class="spinner">Yükleniyor…</div>';
-  const { user, coupons, stats } = await api('/users/' + uid);
+  const [detail, gRes] = await Promise.all([api('/users/' + uid), api('/gameweeks').catch(() => null)]);
+  const { user, coupons, stats } = detail;
   const couponsHtml = coupons.length ? coupons.map(couponCard).join('') : '<div class="empty">Bu oyuncu henüz kupon yapmamış.</div>';
+  const analizHtml = coupons.length ? `<div class="section-title">Analiz <small>${user.username}</small></div>` + analysisCards(coupons, gRes) : '';
 
   const adminHtml = ME.is_admin ? `
     <div class="card">
@@ -1836,6 +1860,7 @@ async function renderUserDetail(uid) {
       </div>
     </div>
     ${adminHtml}
+    ${analizHtml}
     <div class="section-title">Kuponları</div>
     ${couponsHtml}`;
 
