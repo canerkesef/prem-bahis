@@ -317,6 +317,42 @@ async function fplBootstrap() {
   FPL_RAW = { at: now, json: j };
   return j;
 }
+// Ham fixtures (15 dk cache) — gameweek sınırları için.
+let FPL_FIXC = { at: 0, json: null };
+async function fplFixturesRaw() {
+  const now = Date.now();
+  if (FPL_FIXC.json && now - FPL_FIXC.at < 15 * 60 * 1000) return FPL_FIXC.json;
+  try {
+    const res = await fetch('https://fantasy.premierleague.com/api/fixtures/', { headers: { 'user-agent': 'Mozilla/5.0' } });
+    if (!res.ok) return null;
+    const j = await res.json(); FPL_FIXC = { at: now, json: j }; return j;
+  } catch (_) { return null; }
+}
+// Premier Lig haftaları (gameweek): id + son maç tarihine göre sınır. Kuponları PL haftasına göre gruplamak için.
+// Her hafta, bir önceki haftanın son maçından (yoksa deadline'dan) bu haftanın son maçına kadar sürer.
+async function fplGameweeks() {
+  const j = await fplBootstrap().catch(() => null);
+  if (!j) return null;
+  // Her event için fikstürlerden en geç kickoff'u bul (hafta bitişi). Yoksa deadline_time kullan.
+  const lastKick = {};
+  const fx = await fplFixturesRaw().catch(() => null);
+  for (const f of fx || []) {
+    if (f.event == null || !f.kickoff_time) continue;
+    const t = new Date(f.kickoff_time).getTime();
+    if (!lastKick[f.event] || t > lastKick[f.event]) lastKick[f.event] = t;
+  }
+  const events = (j.events || []).map((e) => ({
+    id: e.id,
+    name: e.name || `${e.id}. Hafta`,
+    deadline: e.deadline_time || null,
+    // hafta bitişi: son maç +3 saat (maç süresi), yoksa bir sonraki deadline/çok ileri bir tarih
+    lastMatch: lastKick[e.id] ? new Date(lastKick[e.id] + 3 * 3600 * 1000).toISOString() : null,
+    is_current: !!e.is_current,
+    is_next: !!e.is_next,
+    finished: !!e.finished,
+  }));
+  return { events };
+}
 // Lig geneli istatistik listeleri (gol/asist/form/puan/kaleci/kart) — FPL'den, ucretsiz.
 async function fplLeaderboards() {
   const now = Date.now();
@@ -887,4 +923,4 @@ async function regenerateReports(opts = {}) {
   return { ok: true, generated, remaining, total, errors };
 }
 
-module.exports = { generatePending, generateReportFor, apiFootballDiag, regenerateReports, fplLeaderboards, fplFixtureGoals, fplGoalsFor };
+module.exports = { generatePending, generateReportFor, apiFootballDiag, regenerateReports, fplLeaderboards, fplFixtureGoals, fplGoalsFor, fplGameweeks };

@@ -9,7 +9,7 @@ const { sql, ensureAdmin, ensureSchema } = require('../src/db');
 const { seedSampleMatches } = require('../src/seed');
 const { refreshMatches, refreshResults, hasApi, fetchStandings, normName, fetchLiveScores } = require('../src/oddsApi');
 const { settleMatch, voidMatch, applyHalfTime } = require('../src/settle');
-const { generatePending, apiFootballDiag, regenerateReports, fplLeaderboards, fplFixtureGoals, fplGoalsFor } = require('../src/aiReport');
+const { generatePending, apiFootballDiag, regenerateReports, fplLeaderboards, fplFixtureGoals, fplGoalsFor, fplGameweeks } = require('../src/aiReport');
 const { computeMarkets } = require('../src/odds-derive');
 
 const app = express();
@@ -221,6 +221,17 @@ app.get('/api/live', requireAuth, async (req, res) => {
 app.get('/api/stats', requireAuth, async (req, res) => {
   try {
     const data = await fplLeaderboards();
+    if (!data) return res.json({ ok: false, error: 'FPL verisi alınamadı' });
+    res.json({ ok: true, ...data });
+  } catch (e) {
+    res.json({ ok: false, error: String(e.message || e) });
+  }
+});
+
+// Premier Lig haftaları (gameweek sınırları) — Analiz'de haftayı PL haftası olarak saymak için.
+app.get('/api/gameweeks', requireAuth, async (req, res) => {
+  try {
+    const data = await fplGameweeks();
     if (!data) return res.json({ ok: false, error: 'FPL verisi alınamadı' });
     res.json({ ok: true, ...data });
   } catch (e) {

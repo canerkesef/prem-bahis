@@ -957,19 +957,14 @@ function anTile(label, value, cls) {
   return `<div class="an-tile ${cls || ''}"><div class="an-tv">${value}</div><div class="an-tl">${label}</div></div>`;
 }
 // Son 8 haftanın net kâr/zararı — sıfır çizgisi etrafında ıraksak çubuklar (kâr yukarı/yeşil, zarar aşağı/kırmızı).
-function anWeeklyChart(coupons) {
-  const N = 8, H = 52;
-  const now = anWeekStart(new Date());
-  const weeks = [];
-  for (let i = N - 1; i >= 0; i--) { const ws = new Date(now); ws.setDate(ws.getDate() - i * 7); weeks.push({ start: ws, profit: 0, won: 0, lost: 0 }); }
-  const idx = {}; weeks.forEach((w, i) => { idx[+w.start] = i; });
-  for (const c of coupons) { const k = +anWeekStart(c.commence_time); if (idx[k] == null) continue; const w = weeks[idx[k]]; w.profit += anProfit(c); if (c.status === 'won') w.won++; else if (c.status === 'lost') w.lost++; }
+// Çubuk grafiği genel: weeks = [{label, sub, profit, won, lost}] (en eski solda).
+function anBarsHtml(weeks) {
+  const H = 52;
   const maxAbs = Math.max(1, ...weeks.map((w) => Math.abs(w.profit)));
   const cols = weeks.map((w) => {
     const pos = w.profit >= 0;
     const h = w.profit === 0 ? 0 : Math.max(4, Math.round(Math.abs(w.profit) / maxAbs * H));
-    const lbl = w.start.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' });
-    const tip = w.profit !== 0 ? `${lbl} haftası: ${pos ? '+' : '−'}${anMoney(Math.abs(w.profit))} ASCU · ${w.won}G ${w.lost}M` : `${lbl}: işlem yok`;
+    const tip = w.profit !== 0 ? `${w.sub || w.label}: ${pos ? '+' : '−'}${anMoney(Math.abs(w.profit))} ASCU · ${w.won}G ${w.lost}M` : `${w.sub || w.label}: işlem yok`;
     const valTxt = w.profit !== 0 ? `${pos ? '+' : '−'}${anMoney(Math.abs(w.profit))}` : '';
     const bar = w.profit === 0
       ? '<span class="an-bar zero" title="' + tip + '"></span>'
@@ -977,27 +972,68 @@ function anWeeklyChart(coupons) {
     return `<div class="an-col">
       <div class="an-up">${pos && valTxt ? `<span class="an-val pos">${valTxt}</span>` : ''}${pos ? bar : ''}</div>
       <div class="an-dn">${!pos ? bar : ''}${!pos && valTxt ? `<span class="an-val neg">${valTxt}</span>` : ''}</div>
-      <div class="an-wk">${lbl}</div>
+      <div class="an-wk">${w.label}</div>
     </div>`;
   }).join('');
   return `<div class="an-chart">${cols}</div>`;
 }
+// --- Premier Lig haftası (gameweek) yardımcıları ---
+// bounds: [{id, name, end}] (end = hafta bitiş zamanı, ms). currentId: mevcut PL haftası.
+function anGwIndex(gw) {
+  const evs = (gw.events || []).filter((e) => e.id != null).sort((a, b) => a.id - b.id);
+  const bounds = evs.map((e) => ({ id: e.id, name: e.name || `${e.id}. Hafta`, end: new Date(e.lastMatch || e.deadline || 0).getTime() }));
+  let cur = (evs.find((e) => e.is_current) || {}).id;
+  if (cur == null) { const now = Date.now(); const b = bounds.find((x) => x.end >= now); cur = b ? b.id : (bounds.length ? bounds[bounds.length - 1].id : null); }
+  return { bounds, currentId: cur };
+}
+function anGwOf(t, bounds) {
+  const tt = new Date(t).getTime();
+  for (const b of bounds) if (b.end >= tt) return b.id;
+  return bounds.length ? bounds[bounds.length - 1].id : null;
+}
 async function renderAnaliz(el) {
-  const { coupons } = await api('/coupons/mine');
+  const [cRes, gRes] = await Promise.all([
+    api('/coupons/mine'),
+    api('/gameweeks').catch(() => null),
+  ]);
+  const coupons = (cRes && cRes.coupons) || [];
   const name = ME.username;
-  if (!coupons || !coupons.length) {
+  if (!coupons.length) {
     el.innerHTML = `<div class="section-title">Analizim</div><div class="empty">Henüz kupon yok — Bülten'den kupon yapınca kâr/zarar analizin burada otomatik oluşur.</div>`;
     return;
   }
-  const now = anWeekStart(new Date());
-  const weekCoupons = coupons.filter((c) => +anWeekStart(c.commence_time) === +now);
+  // Hafta = Premier Lig haftası (gameweek). FPL verisi yoksa takvim haftasına (Pzt–Paz) düş.
+  const useGw = !!(gRes && gRes.ok && gRes.events && gRes.events.length);
+  const gwIdx = useGw ? anGwIndex(gRes) : null;
+  const keyOf = (c) => (useGw ? anGwOf(c.commence_time, gwIdx.bounds) : +anWeekStart(c.commence_time));
+  const curKey = useGw ? gwIdx.currentId : +anWeekStart(new Date());
+  const weekCoupons = coupons.filter((c) => keyOf(c) === curKey);
   const w = anScope(weekCoupons), a = anScope(coupons);
+  // Grafik: son 8 hafta (PL haftası ya da takvim).
+  let weeks;
+  if (useGw) {
+    const ids = gwIdx.bounds.map((b) => b.id);
+    const curI = ids.indexOf(gwIdx.currentId); const endI = curI >= 0 ? curI : ids.length - 1;
+    const slice = ids.slice(Math.max(0, endI - 7), endI + 1);
+    const buckets = {}; slice.forEach((id) => { buckets[id] = { profit: 0, won: 0, lost: 0 }; });
+    for (const c of coupons) { const id = anGwOf(c.commence_time, gwIdx.bounds); if (buckets[id]) { buckets[id].profit += anProfit(c); if (c.status === 'won') buckets[id].won++; else if (c.status === 'lost') buckets[id].lost++; } }
+    weeks = slice.map((id) => ({ label: `${id}`, sub: `${id}. Hafta`, ...buckets[id] }));
+  } else {
+    const nowW = anWeekStart(new Date()); const arr = [];
+    for (let i = 7; i >= 0; i--) { const ws = new Date(nowW); ws.setDate(ws.getDate() - i * 7); arr.push({ start: +ws, profit: 0, won: 0, lost: 0, label: ws.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' }) }); }
+    const bi = {}; arr.forEach((x, i) => { bi[x.start] = i; });
+    for (const c of coupons) { const k = +anWeekStart(c.commence_time); if (bi[k] == null) continue; const x = arr[bi[k]]; x.profit += anProfit(c); if (c.status === 'won') x.won++; else if (c.status === 'lost') x.lost++; }
+    weeks = arr.map((x) => ({ label: x.label, sub: `${x.label} haftası`, profit: x.profit, won: x.won, lost: x.lost }));
+  }
   const cls = (p) => (p > 0 ? 'pos' : p < 0 ? 'neg' : 'zero');
   const plv = (p) => `${p > 0 ? '+' : p < 0 ? '−' : ''}${anMoney(Math.abs(p))}`;
+  const weekSub = useGw ? `${curKey}. PL haftası` : `${anWeekStart(new Date()).toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' })} haftası`;
+  const chartSub = useGw ? 'son 8 PL haftası' : 'son 8 hafta';
+  const chartNote = useGw ? 'Premier Lig haftasına göre · bekleyen kuponlar sayılmaz' : 'maç tarihine göre · bekleyen kuponlar sayılmaz';
   el.innerHTML =
     `<div class="section-title">Analizim <small>${name}</small></div>`
     + `<div class="an-card">
-        <div class="an-head">BU HAFTA <span class="an-sub">${now.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' })} haftası</span></div>
+        <div class="an-head">BU HAFTA <span class="an-sub">${weekSub}</span></div>
         <div class="an-pl ${cls(w.profit)}"><span class="an-pl-lbl">Kâr / Zarar</span><span class="an-pl-val">${plv(w.profit)} <small>ASCU</small></span></div>
         <div class="an-tiles">
           ${anTile('Kupon', w.total)}${anTile('Tuttu', w.won, 'ok')}${anTile('Yattı', w.lost, 'no')}${anTile('Bekleyen', w.pending, 'wait')}
@@ -1013,9 +1049,9 @@ async function renderAnaliz(el) {
         <div class="an-mini">Yatırılan <b>${fmtTL(a.staked)}</b> · Dönen <b>${fmtTL(a.returned)}</b> · En iyi tutturulan oran <b>${a.bestOdd ? a.bestOdd.toFixed(2) : '—'}</b></div>
       </div>`
     + `<div class="an-card">
-        <div class="an-head">HAFTALIK KÂR / ZARAR <span class="an-sub">son 8 hafta</span></div>
-        ${anWeeklyChart(coupons)}
-        <div class="an-legend"><span class="an-dot pos"></span>Kâr <span class="an-dot neg"></span>Zarar <span class="an-note">maç tarihine göre · bekleyen kuponlar sayılmaz</span></div>
+        <div class="an-head">HAFTALIK KÂR / ZARAR <span class="an-sub">${chartSub}</span></div>
+        ${anBarsHtml(weeks)}
+        <div class="an-legend"><span class="an-dot pos"></span>Kâr <span class="an-dot neg"></span>Zarar <span class="an-note">${chartNote}</span></div>
       </div>`;
 }
 
