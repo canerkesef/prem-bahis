@@ -226,6 +226,7 @@ function buildNav() {
   const items = [
     ['bulten', 'Bülten', '⚽'],
     ['kuponlarim', 'Kuponlarım', '🧾'],
+    ['analiz', 'Analiz', '💰'],
     ['kullanicilar', 'Oyuncular', '👥'],
     ['puan', 'Puan', '📊'],
     ['istatistik', 'İstatistik', '📈'],
@@ -295,6 +296,7 @@ async function render(view) {
   try {
     if (view === 'bulten') await renderBulten(el);
     else if (view === 'kuponlarim') await renderKuponlarim(el);
+    else if (view === 'analiz') await renderAnaliz(el);
     else if (view === 'kullanicilar') await renderKullanicilar(el);
     else if (view === 'puan') await renderPuan(el);
     else if (view === 'istatistik') await renderStats(el);
@@ -922,6 +924,101 @@ async function renderKuponlarim(el) {
   el.innerHTML = `<div class="section-title">Kuponlarım <small>${coupons.length} kupon</small></div>` + coupons.map(couponCard).join('');
   wireCouponCancels(el, async () => { await refreshMe(); renderKuponlarim(el); });
 }
+
+// ----- Analiz (kişisel) -----
+// Haftanın başı (Pazartesi 00:00, yerel/TR saati).
+function anWeekStart(d) {
+  const x = new Date(d); x.setHours(0, 0, 0, 0);
+  const day = (x.getDay() + 6) % 7; // Pazartesi = 0
+  x.setDate(x.getDate() - day);
+  return x;
+}
+// Bir kuponun net kâr/zararı: tuttu → kazanç−bahis, yattı → −bahis, iade/bekleyen → 0.
+function anProfit(c) {
+  if (c.status === 'won') return (Number(c.potential_win) || 0) - (Number(c.stake) || 0);
+  if (c.status === 'lost') return -(Number(c.stake) || 0);
+  return 0;
+}
+function anScope(list) {
+  let won = 0, lost = 0, pending = 0, vd = 0, staked = 0, returned = 0, profit = 0, bestOdd = 0;
+  for (const c of list) {
+    staked += Number(c.stake) || 0;
+    profit += anProfit(c);
+    if (c.status === 'won') { won++; returned += Number(c.potential_win) || 0; if (Number(c.odd) > bestOdd) bestOdd = Number(c.odd); }
+    else if (c.status === 'lost') lost++;
+    else if (c.status === 'pending') pending++;
+    else if (c.status === 'void') vd++;
+  }
+  const resolved = won + lost;
+  return { total: list.length, won, lost, pending, void: vd, staked, returned, profit, bestOdd, winRate: resolved ? Math.round(won / resolved * 100) : 0 };
+}
+function anMoney(n) { return Math.round(Number(n) || 0).toLocaleString('tr-TR'); }
+function anTile(label, value, cls) {
+  return `<div class="an-tile ${cls || ''}"><div class="an-tv">${value}</div><div class="an-tl">${label}</div></div>`;
+}
+// Son 8 haftanın net kâr/zararı — sıfır çizgisi etrafında ıraksak çubuklar (kâr yukarı/yeşil, zarar aşağı/kırmızı).
+function anWeeklyChart(coupons) {
+  const N = 8, H = 52;
+  const now = anWeekStart(new Date());
+  const weeks = [];
+  for (let i = N - 1; i >= 0; i--) { const ws = new Date(now); ws.setDate(ws.getDate() - i * 7); weeks.push({ start: ws, profit: 0, won: 0, lost: 0 }); }
+  const idx = {}; weeks.forEach((w, i) => { idx[+w.start] = i; });
+  for (const c of coupons) { const k = +anWeekStart(c.commence_time); if (idx[k] == null) continue; const w = weeks[idx[k]]; w.profit += anProfit(c); if (c.status === 'won') w.won++; else if (c.status === 'lost') w.lost++; }
+  const maxAbs = Math.max(1, ...weeks.map((w) => Math.abs(w.profit)));
+  const cols = weeks.map((w) => {
+    const pos = w.profit >= 0;
+    const h = w.profit === 0 ? 0 : Math.max(4, Math.round(Math.abs(w.profit) / maxAbs * H));
+    const lbl = w.start.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' });
+    const tip = w.profit !== 0 ? `${lbl} haftası: ${pos ? '+' : '−'}${anMoney(Math.abs(w.profit))} ASCU · ${w.won}G ${w.lost}M` : `${lbl}: işlem yok`;
+    const valTxt = w.profit !== 0 ? `${pos ? '+' : '−'}${anMoney(Math.abs(w.profit))}` : '';
+    const bar = w.profit === 0
+      ? '<span class="an-bar zero" title="' + tip + '"></span>'
+      : `<span class="an-bar ${pos ? 'pos' : 'neg'}" style="height:${h}px" title="${tip}"></span>`;
+    return `<div class="an-col">
+      <div class="an-up">${pos && valTxt ? `<span class="an-val pos">${valTxt}</span>` : ''}${pos ? bar : ''}</div>
+      <div class="an-dn">${!pos ? bar : ''}${!pos && valTxt ? `<span class="an-val neg">${valTxt}</span>` : ''}</div>
+      <div class="an-wk">${lbl}</div>
+    </div>`;
+  }).join('');
+  return `<div class="an-chart">${cols}</div>`;
+}
+async function renderAnaliz(el) {
+  const { coupons } = await api('/coupons/mine');
+  const name = ME.username;
+  if (!coupons || !coupons.length) {
+    el.innerHTML = `<div class="section-title">Analizim</div><div class="empty">Henüz kupon yok — Bülten'den kupon yapınca kâr/zarar analizin burada otomatik oluşur.</div>`;
+    return;
+  }
+  const now = anWeekStart(new Date());
+  const weekCoupons = coupons.filter((c) => +anWeekStart(c.commence_time) === +now);
+  const w = anScope(weekCoupons), a = anScope(coupons);
+  const cls = (p) => (p > 0 ? 'pos' : p < 0 ? 'neg' : 'zero');
+  const plv = (p) => `${p > 0 ? '+' : p < 0 ? '−' : ''}${anMoney(Math.abs(p))}`;
+  el.innerHTML =
+    `<div class="section-title">Analizim <small>${name}</small></div>`
+    + `<div class="an-card">
+        <div class="an-head">BU HAFTA <span class="an-sub">${now.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' })} haftası</span></div>
+        <div class="an-pl ${cls(w.profit)}"><span class="an-pl-lbl">Kâr / Zarar</span><span class="an-pl-val">${plv(w.profit)} <small>ASCU</small></span></div>
+        <div class="an-tiles">
+          ${anTile('Kupon', w.total)}${anTile('Tuttu', w.won, 'ok')}${anTile('Yattı', w.lost, 'no')}${anTile('Bekleyen', w.pending, 'wait')}
+        </div>
+        <div class="an-mini">Yatırılan <b>${fmtTL(w.staked)}</b> · Dönen <b>${fmtTL(w.returned)}</b> · İsabet <b>%${w.winRate}</b></div>
+      </div>`
+    + `<div class="an-card">
+        <div class="an-head">GENEL <span class="an-sub">tüm zamanlar</span></div>
+        <div class="an-pl ${cls(a.profit)}"><span class="an-pl-lbl">Toplam Kâr / Zarar</span><span class="an-pl-val">${plv(a.profit)} <small>ASCU</small></span></div>
+        <div class="an-tiles">
+          ${anTile('Kupon', a.total)}${anTile('Tuttu', a.won, 'ok')}${anTile('Yattı', a.lost, 'no')}${anTile('İsabet', '%' + a.winRate)}
+        </div>
+        <div class="an-mini">Yatırılan <b>${fmtTL(a.staked)}</b> · Dönen <b>${fmtTL(a.returned)}</b> · En iyi tutturulan oran <b>${a.bestOdd ? a.bestOdd.toFixed(2) : '—'}</b></div>
+      </div>`
+    + `<div class="an-card">
+        <div class="an-head">HAFTALIK KÂR / ZARAR <span class="an-sub">son 8 hafta</span></div>
+        ${anWeeklyChart(coupons)}
+        <div class="an-legend"><span class="an-dot pos"></span>Kâr <span class="an-dot neg"></span>Zarar <span class="an-note">maç tarihine göre · bekleyen kuponlar sayılmaz</span></div>
+      </div>`;
+}
+
 
 function couponCard(c) {
   const st = c.status;
