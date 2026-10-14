@@ -1,0 +1,17 @@
+{
+  "name": "Premier Lig — Tahmin Oyunu",
+  "short_name": "Premier Lig",
+  "description": "Arkadaşlar arası sanal Premier Lig tahmin oyunu (ASCU · bahis/kumar değildir).",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#3d195b",
+  "theme_color": "#3d195b",
+  "lang": "tr",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
