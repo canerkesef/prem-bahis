@@ -76,16 +76,19 @@ function ensureSchema() {
     await sql`ALTER TABLE app_state ADD COLUMN IF NOT EXISTS live_scores jsonb`;
     await sql`ALTER TABLE app_state ADD COLUMN IF NOT EXISTS live_scores_at timestamptz`;
     await sql`ALTER TABLE app_state ADD COLUMN IF NOT EXISTS live_lock timestamptz`;
-    // YENİ MODEL: Bahis artık kupon oynanırken bakiyeden DÜŞÜLMEZ; sadece kazanma/kaybetmede güncellenir.
-    // Eski modelde bekleyen kuponların bahsi düşülmüştü. Tek seferlik: bekleyen kuponların
-    // bahsini sahibine geri ekleyerek bakiyeyi yeni modele taşı (çift çalışmayı flag önler).
+    // BAKİYE MODELİ: bahis, kupon oynanırken bakiyeden DÜŞÜLÜR (klasik model); "kuponda" tutarı ayrıca gösterilir.
+    // Güvenlik: Eğer kısa süre önce "bahis düşmeyen" sürüm deploy edilip bekleyen bahisler bakiyeye
+    // EKLENDİYSE (stake_migrated=true), eski modele dönerken o bahisleri tek seferlik TEKRAR düş.
+    // Hiç o sürüm deploy edilmediyse stake_migrated=false kalır ve bu blok hiçbir şey yapmaz.
     await sql`ALTER TABLE app_state ADD COLUMN IF NOT EXISTS stake_migrated boolean NOT NULL DEFAULT false`;
+    await sql`ALTER TABLE app_state ADD COLUMN IF NOT EXISTS stake_reverted boolean NOT NULL DEFAULT false`;
     await sql.begin(async (tx) => {
-      const claim = await tx`UPDATE app_state SET stake_migrated=true WHERE id=1 AND stake_migrated IS NOT TRUE RETURNING id`;
-      if (claim.length) {
-        await tx`UPDATE users u SET balance = balance
-          + COALESCE((SELECT SUM(stake) FROM coupons c WHERE c.user_id=u.id AND c.status='pending'), 0)
+      const [st] = await tx`SELECT stake_migrated, stake_reverted FROM app_state WHERE id=1 FOR UPDATE`;
+      if (st && st.stake_migrated === true && st.stake_reverted !== true) {
+        await tx`UPDATE users u SET balance = GREATEST(balance
+          - COALESCE((SELECT SUM(stake) FROM coupons c WHERE c.user_id=u.id AND c.status='pending'), 0), 0)
           WHERE status='approved'`;
+        await tx`UPDATE app_state SET stake_reverted=true WHERE id=1`;
       }
     });
   })().catch((e) => {

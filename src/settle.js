@@ -92,18 +92,14 @@ async function settleMatch(matchId, homeScore, awayScore, htHome = null, htAway 
   await sql.begin(async (tx) => {
     // KURAL 8: Zaten sonuclanmis maci duzeltiyorsak once eski kupon etkilerini geri al.
     // (Katilim cezasi skordan bagimsizdir; kimin kupon yapmadigi degismez, dokunulmaz.)
-    // YENİ MODEL: bahis oynanırken düşülmez → kazanan: +(pw−stake), kaybeden: −stake. Geri alırken tersi.
     if (wasSettled && correct) {
       const prev = await tx`
         SELECT user_id, status, stake, potential_win
-        FROM coupons WHERE match_id=${matchId} AND status IN ('won','lost')`;
+        FROM coupons WHERE match_id=${matchId} AND status IN ('won','void')`;
       for (const c of prev) {
-        if (c.status === 'won') {
-          await tx`UPDATE users SET balance = GREATEST(balance - (${c.potential_win} - ${c.stake}), 0) WHERE id=${c.user_id}`;
-        } else { // lost
-          await tx`UPDATE users SET balance = balance + ${c.stake} WHERE id=${c.user_id}`;
-        }
-        // void: bakiye hiç değişmedi, geri alınacak bir şey yok.
+        const amt = c.status === 'won' ? c.potential_win : c.stake; // won: kazanc geri; void: iade geri
+        // KURAL 4: eksi bakiyeye dusme (geri alma bakiyeyi 0'in altina cekmez).
+        await tx`UPDATE users SET balance = GREATEST(balance - ${amt}, 0) WHERE id=${c.user_id}`;
       }
       await tx`UPDATE coupons SET status='pending', settled_at=NULL WHERE match_id=${matchId}`;
     }
@@ -121,8 +117,9 @@ async function settleMatch(matchId, homeScore, awayScore, htHome = null, htAway 
       const isIY = c.market.startsWith('iy_');
       const isIYMS = c.market === 'iyms';
       if ((isIY || isIYMS) && !haveHT) {
-        // Devre skoru bilinmiyor -> ilk yari / İY-MS kuponu iptal (void). Yeni modelde bahis düşülmediği için iade yok.
+        // Devre skoru bilinmiyor -> ilk yari / İY-MS kuponu iade (bahis geri)
         await tx`UPDATE coupons SET status='void', settled_at=now() WHERE id=${c.id}`;
+        await tx`UPDATE users SET balance = balance + ${c.stake} WHERE id=${c.user_id}`;
         continue;
       }
       const won = isIYMS
@@ -132,10 +129,9 @@ async function settleMatch(matchId, homeScore, awayScore, htHome = null, htAway 
           : isWinner(c.market, c.selection, homeScore, awayScore);
       if (won) {
         await tx`UPDATE coupons SET status='won', settled_at=now() WHERE id=${c.id}`;
-        await tx`UPDATE users SET balance = balance + (${c.potential_win} - ${c.stake}) WHERE id=${c.user_id}`;
+        await tx`UPDATE users SET balance = balance + ${c.potential_win} WHERE id=${c.user_id}`;
       } else {
         await tx`UPDATE coupons SET status='lost', settled_at=now() WHERE id=${c.id}`;
-        await tx`UPDATE users SET balance = GREATEST(balance - ${c.stake}, 0) WHERE id=${c.user_id}`;
       }
     }
 
@@ -174,16 +170,16 @@ async function applyHalfTime(matchId, htHome, htAway) {
       SELECT id, user_id, market, selection, stake, potential_win
       FROM coupons WHERE match_id=${matchId} AND (market LIKE 'iy_%' OR market='iyms') AND status='void'`;
     for (const c of iy) {
-      // Yeni model: void'da bahis düşülmemişti → önce geri alma yok. Devre skoruna göre hesapla.
+      // Onceki iadeyi geri al, sonra devre skoruna gore hesapla.
+      await tx`UPDATE users SET balance = GREATEST(balance - ${c.stake}, 0) WHERE id=${c.user_id}`;
       const cWon = c.market === 'iyms'
         ? iymsWinner(c.selection, htHome, htAway, ftH, ftA)
         : isWinner(c.market, c.selection, htHome, htAway);
       if (cWon) {
         await tx`UPDATE coupons SET status='won', settled_at=now() WHERE id=${c.id}`;
-        await tx`UPDATE users SET balance = balance + (${c.potential_win} - ${c.stake}) WHERE id=${c.user_id}`;
+        await tx`UPDATE users SET balance = balance + ${c.potential_win} WHERE id=${c.user_id}`;
       } else {
         await tx`UPDATE coupons SET status='lost', settled_at=now() WHERE id=${c.id}`;
-        await tx`UPDATE users SET balance = GREATEST(balance - ${c.stake}, 0) WHERE id=${c.user_id}`;
       }
       iyCount++;
     }
@@ -193,15 +189,20 @@ async function applyHalfTime(matchId, htHome, htAway) {
   return { ok: true, iyCount };
 }
 
-// Maci iptal eder (void). Yeni modelde bahis düşülmediği için iade yoktur; kuponlar sadece void'e çekilir.
+// Maci iptal eder (void) ve tum bekleyen kuponlarin bahsini iade eder.
 async function voidMatch(matchId) {
   const found = await sql`SELECT id FROM matches WHERE id = ${matchId}`;
   if (found.length === 0) throw new Error('Mac bulunamadi');
 
   await sql.begin(async (tx) => {
     await tx`UPDATE matches SET status='void' WHERE id=${matchId}`;
-    await tx`UPDATE coupons SET status='void', settled_at=now() WHERE match_id=${matchId} AND status='pending'`;
-    // KURAL 13: durum degisti -> elenme durumlarini yeniden hesapla.
+    const coupons = await tx`
+      SELECT id, user_id, stake FROM coupons WHERE match_id=${matchId} AND status='pending'`;
+    for (const c of coupons) {
+      await tx`UPDATE coupons SET status='void', settled_at=now() WHERE id=${c.id}`;
+      await tx`UPDATE users SET balance = balance + ${c.stake} WHERE id=${c.user_id}`;
+    }
+    // KURAL 13: Iade sonrasi elenme durumlarini yeniden hesapla.
     await recomputeEliminations(tx);
   });
 
