@@ -132,7 +132,8 @@ app.get('/api/me', async (req, res) => {
     const u = await currentUser(req);
     const config = { min_stake: MIN_STAKE, tournament_end: TOURNAMENT_END, no_bet_penalty: Number(process.env.NO_BET_PENALTY || 100) };
     if (!u) return res.json({ user: null, config });
-    res.json({ user: { id: Number(u.id), username: u.username, is_admin: !!u.is_admin, status: u.status, balance: Number(u.balance), eliminated: !!u.eliminated }, config });
+    const [pend] = await sql`SELECT COALESCE(SUM(stake),0) AS p FROM coupons WHERE user_id=${u.id} AND status='pending'`;
+    res.json({ user: { id: Number(u.id), username: u.username, is_admin: !!u.is_admin, status: u.status, balance: Number(u.balance), pending: Number(pend.p), eliminated: !!u.eliminated }, config });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
   }
@@ -437,11 +438,14 @@ app.post('/api/coupons', requireAuth, async (req, res) => {
           AND created_at > now() - interval '20 seconds'
         LIMIT 1`;
       if (dup.length) { duplicate = true; return; }
-      const upd = await tx`
-        UPDATE users SET balance = balance - ${stake}
-        WHERE id=${req.user.id} AND balance >= ${stake}
-        RETURNING id`;
-      if (upd.length === 0) return; // yetersiz bakiye
+      // YENİ MODEL: bahis bakiyeden DÜŞÜLMEZ. Kullanılabilir = bakiye − bekleyen kupon toplamı.
+      // Oyuncu kullanılabilir bakiyesinden fazlasını bağlayamaz (eksiye düşmeyi önler).
+      const [bal] = await tx`
+        SELECT balance,
+          COALESCE((SELECT SUM(stake) FROM coupons c WHERE c.user_id=${req.user.id} AND c.status='pending'), 0) AS pending
+        FROM users WHERE id=${req.user.id}`;
+      const free = Number(bal.balance) - Number(bal.pending);
+      if (free < stake) return; // yetersiz kullanılabilir bakiye
       ok = true;
       await tx`
         INSERT INTO coupons (user_id, match_id, home_team, away_team, commence_time,
@@ -453,10 +457,13 @@ app.post('/api/coupons', requireAuth, async (req, res) => {
       const brows = await sql`SELECT balance FROM users WHERE id=${req.user.id}`;
       return res.status(409).json({ error: 'Bu kupon az önce zaten oluşturuldu; çift gönderim engellendi.', duplicate: true, balance: Number(brows[0].balance) });
     }
-    if (!ok) return res.status(400).json({ error: 'Yetersiz bakiye.' });
+    if (!ok) return res.status(400).json({ error: 'Kullanılabilir bakiyen yetersiz (bekleyen kuponların düşülür).' });
 
-    const brows = await sql`SELECT balance FROM users WHERE id=${req.user.id}`;
-    res.json({ ok: true, balance: Number(brows[0].balance) });
+    const brows = await sql`
+      SELECT balance,
+        COALESCE((SELECT SUM(stake) FROM coupons c WHERE c.user_id=${req.user.id} AND c.status='pending'), 0) AS pending
+      FROM users WHERE id=${req.user.id}`;
+    res.json({ ok: true, balance: Number(brows[0].balance), pending: Number(brows[0].pending) });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
   }
@@ -540,7 +547,7 @@ app.get('/api/users', requireAuth, async (req, res) => {
     }
 
     // 2) Oyuncular (guncel leader_ms + last_ms ile).
-    const rows = await sql`SELECT id, username, is_admin, balance, eliminated, COALESCE(leader_ms,0) AS leader_ms, COALESCE(last_ms,0) AS last_ms FROM users WHERE status='approved' ORDER BY balance DESC`;
+    const rows = await sql`SELECT id, username, is_admin, balance, eliminated, COALESCE(leader_ms,0) AS leader_ms, COALESCE(last_ms,0) AS last_ms, COALESCE((SELECT SUM(stake) FROM coupons c WHERE c.user_id=users.id AND c.status='pending'),0) AS pending FROM users WHERE status='approved' ORDER BY balance DESC`;
 
     // Kupon istatistikleri (kazanan/kaybeden/bekleyen + tutturulan toplam oran).
     const stats = await sql`
@@ -574,6 +581,7 @@ app.get('/api/users', requireAuth, async (req, res) => {
       return {
         id, username: u.username, is_admin: !!u.is_admin,
         balance: Number(u.balance), eliminated: !!u.eliminated,
+        pending: Number(u.pending) || 0,
         won: Number(s.won || 0), lost: Number(s.lost || 0), pending: Number(s.pending || 0),
         won_odds: Math.round(Number(s.won_odds || 0) * 100) / 100,
         missed: Math.max(totalSettled - (playedMap[id] || 0), 0),
@@ -604,7 +612,8 @@ app.get('/api/users/:id', requireAuth, async (req, res) => {
       },
       { total: 0, won: 0, lost: 0, pending: 0 }
     );
-    res.json({ user: { id: Number(u.id), username: u.username, is_admin: !!u.is_admin, balance: Number(u.balance), eliminated: !!u.eliminated, created_at: u.created_at }, coupons, stats });
+    const pending = coupons.filter((c) => c.status === 'pending').reduce((s, c) => s + (Number(c.stake) || 0), 0);
+    res.json({ user: { id: Number(u.id), username: u.username, is_admin: !!u.is_admin, balance: Number(u.balance), pending, eliminated: !!u.eliminated, created_at: u.created_at }, coupons, stats });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
   }
@@ -648,13 +657,11 @@ app.post('/api/admin/coupons/:id/cancel', requireAdmin, async (req, res) => {
     const c = rows[0];
     if (!c) return res.status(404).json({ error: 'Kupon bulunamadi.' });
     if (c.status !== 'pending') return res.status(400).json({ error: 'Sadece BEKLEYEN kupon iptal edilebilir; sonuclanmis kupon iptal edilemez.' });
-    await sql.begin(async (tx) => {
-      await tx`UPDATE users SET balance = balance + ${c.stake} WHERE id=${c.user_id}`;
-      await tx`UPDATE coupons SET status='void', settled_at=now() WHERE id=${cid}`;
-    });
+    // Yeni model: bahis düşülmediği için iade yok; kupon sadece void'e çekilir.
+    await sql`UPDATE coupons SET status='void', settled_at=now() WHERE id=${cid}`;
     await sql`UPDATE users SET eliminated=false WHERE id=${c.user_id} AND balance >= ${MIN_STAKE}`;
     const b = await sql`SELECT balance FROM users WHERE id=${c.user_id}`;
-    res.json({ ok: true, refunded: Number(c.stake), balance: Number(b[0].balance) });
+    res.json({ ok: true, refunded: 0, balance: Number(b[0].balance) });
   } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 

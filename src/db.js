@@ -76,6 +76,18 @@ function ensureSchema() {
     await sql`ALTER TABLE app_state ADD COLUMN IF NOT EXISTS live_scores jsonb`;
     await sql`ALTER TABLE app_state ADD COLUMN IF NOT EXISTS live_scores_at timestamptz`;
     await sql`ALTER TABLE app_state ADD COLUMN IF NOT EXISTS live_lock timestamptz`;
+    // YENİ MODEL: Bahis artık kupon oynanırken bakiyeden DÜŞÜLMEZ; sadece kazanma/kaybetmede güncellenir.
+    // Eski modelde bekleyen kuponların bahsi düşülmüştü. Tek seferlik: bekleyen kuponların
+    // bahsini sahibine geri ekleyerek bakiyeyi yeni modele taşı (çift çalışmayı flag önler).
+    await sql`ALTER TABLE app_state ADD COLUMN IF NOT EXISTS stake_migrated boolean NOT NULL DEFAULT false`;
+    await sql.begin(async (tx) => {
+      const claim = await tx`UPDATE app_state SET stake_migrated=true WHERE id=1 AND stake_migrated IS NOT TRUE RETURNING id`;
+      if (claim.length) {
+        await tx`UPDATE users u SET balance = balance
+          + COALESCE((SELECT SUM(stake) FROM coupons c WHERE c.user_id=u.id AND c.status='pending'), 0)
+          WHERE status='approved'`;
+      }
+    });
   })().catch((e) => {
     schemaReady = null;
     throw e;

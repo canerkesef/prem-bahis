@@ -257,7 +257,7 @@ async function boot() {
   $('#auth-screen').classList.add('hidden');
   $('#app').classList.remove('hidden');
   $('#user-chip').textContent = ME.username + (ME.is_admin ? ' (admin)' : '');
-  updateBalance(ME.balance);
+  updateBalance(ME.balance, ME.pending);
   buildNav();
   render('bulten');
   // Ucretsiz-guvenli otomatik sonuclandirma: bitmis maclar varsa arka planda tetikle.
@@ -275,14 +275,18 @@ async function boot() {
     .catch(() => {});
 }
 
-function updateBalance(b) {
+function updateBalance(b, p) {
   if (b != null) ME.balance = b;
-  $('#balance').textContent = fmtTL(ME.balance);
+  if (p != null) ME.pending = p;
+  const pend = Number(ME.pending) || 0;
+  const el = $('#balance');
+  if (!el) return;
+  el.innerHTML = `<span class="bal-main">${fmtTL(ME.balance)}</span>${pend > 0 ? `<span class="bal-pend">${fmtTL(pend)} kuponda</span>` : ''}`;
 }
 
 async function refreshMe() {
   const { user } = await api('/me');
-  if (user) updateBalance(user.balance);
+  if (user) updateBalance(user.balance, user.pending);
 }
 
 // ---------- Render ----------
@@ -839,25 +843,27 @@ async function openBet(mid, market, sel) {
   const odd = m.odds && m.odds[market] && m.odds[market][sel];
   if (!odd) return toast('Oran mevcut değil', true);
 
+  const avail = (Number(ME.balance) || 0) - (Number(ME.pending) || 0);
   $('#bet-content').innerHTML = `
     <div class="bet-teams">${m.home_team} vs ${m.away_team}</div>
     <div class="bet-pick">${MARKET_LABELS[market]} · ${PICK_LABELS[market][sel]} · Oran ${Number(odd).toFixed(2)}</div>
     <div class="bet-field">
-      <label>Bahis tutarı (ASCU) — Bakiye: ${fmtTL(ME.balance)} · Min. ${CONFIG.min_stake}</label>
+      <label>Bahis tutarı (ASCU) — Kullanılabilir: ${fmtTL(avail)} · Min. ${CONFIG.min_stake}</label>
       <input id="stake-input" type="number" min="${CONFIG.min_stake}" step="1" placeholder="En az ${CONFIG.min_stake}" inputmode="numeric" />
       <div class="quick">
         <button data-q="50">50</button><button data-q="100">100</button>
         <button data-q="250">250</button><button data-q="500">500</button>
       </div>
     </div>
-    <div class="bet-summary"><span>Olası kazanç</span><b id="pot-win">0 ASCU</b></div>
+    <div class="bet-summary"><span>Kazanırsan (net kâr)</span><b id="pot-win">0 ASCU</b></div>
+    <div class="bet-note2">Bahis bakiyeden hemen düşmez; sonuç belli olunca bakiyen güncellenir. Kaybedersen bahsin kadar düşer.</div>
     <button class="btn-primary" id="place-bet">Kuponu Onayla</button>`;
 
   const stakeInput = $('#stake-input');
   const potWin = $('#pot-win');
   const calc = () => {
     const s = Number(stakeInput.value) || 0;
-    potWin.textContent = fmtTL(Math.round(s * odd * 100) / 100);
+    potWin.textContent = '+' + fmtTL(Math.round(s * (odd - 1) * 100) / 100);
   };
   stakeInput.addEventListener('input', calc);
   $$('#bet-content .quick button').forEach((q) =>
@@ -877,7 +883,7 @@ async function openBet(mid, market, sel) {
     btn.textContent = 'Oluşturuluyor…';
     try {
       const r = await api('/coupons', { method: 'POST', body: { match_id: mid, market, selection: sel, stake } });
-      if (r.balance != null) updateBalance(r.balance);
+      if (r.balance != null) updateBalance(r.balance, r.pending);
       closeBet();
       toast('Kupon oluşturuldu! ✅');
     } catch (err) {
@@ -1075,7 +1081,7 @@ function couponCard(c) {
     </div>
     <div class="coupon-meta">
       <span>Bahis: <b>${fmtTL(c.stake)}</b></span>
-      <span>Olası: <b>${fmtTL(c.potential_win)}</b></span>
+      <span>${c.status === 'won' ? 'Kazanç' : 'Kazanırsan'}: <b class="cpn-net">+${fmtTL((Number(c.potential_win) || 0) - (Number(c.stake) || 0))}</b></span>
       <span>${fmtDate(c.commence_time)}${score}</span>
     </div>
     ${c.created_at ? `<div class="coupon-stamp" title="Kuponun oynanma zamanı (saniyeye kadar)">🕒 Oynanma: ${fmtStamp(c.created_at)}</div>` : ''}
@@ -1127,6 +1133,7 @@ function championCard(u, leaderDays) {
     <span class="champ-logo cat-bg" role="img" aria-label="Premier Lig"></span>
     <div class="champ-name">${u.username}${u.is_admin ? '<span class="admin-tag">admin</span>' : ''}${you}${elim}</div>
     <div class="champ-bal">${fmtTL(u.balance)}</div>
+    ${Number(u.pending) > 0 ? `<div class="champ-pend">${fmtTL(u.pending)} kuponda</div>` : ''}
     <div class="champ-days">${daysTxt}</div>
     ${totalTxt}
     ${statsLine(u)}
@@ -1149,7 +1156,7 @@ function playerRow(u, rank, leadBal) {
           <div class="pgap">Lidere fark: <b>-${fmtTL(gap)}</b></div>
         </div>
       </div>
-      <div class="ubalance">${fmtTL(u.balance)}</div>
+      <div class="ubalance">${fmtTL(u.balance)}${Number(u.pending) > 0 ? `<small class="u-pend">${fmtTL(u.pending)} kuponda</small>` : ''}</div>
     </div>
     <div class="race"><i style="width:${pct}%"></i></div>
     ${statsLine(u)}
@@ -1198,6 +1205,7 @@ async function renderUserDetail(uid) {
       <h3>${user.username}${user.is_admin ? '<span class="admin-tag">admin</span>' : ''}${user.eliminated ? '<span class="elim-tag">Kaybetti</span>' : ''}</h3>
       <div class="coupon-meta" style="margin:0">
         <span>Bakiye: <b style="color:var(--gold)">${fmtTL(user.balance)}</b></span>
+        ${Number(user.pending) > 0 ? `<span>Kuponda: <b>${fmtTL(user.pending)}</b></span>` : ''}
         <span>Toplam kupon: <b>${stats.total}</b></span>
         <span style="color:var(--accent)">Kazanan: <b>${stats.won}</b></span>
         <span style="color:var(--danger)">Kaybeden: <b>${stats.lost}</b></span>

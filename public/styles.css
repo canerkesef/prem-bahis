@@ -555,3 +555,10 @@ input{font-family:inherit}
 .an-rk.won::before{background:#12a05c}
 .an-rk.lost::before{background:#d92b2b}
 .an-rk.pend::before{background:#b9a7d6}
+
+/* Bekleyen kupon tutarı gösterimi (yeni bakiye modeli) */
+.balance{display:inline-flex;flex-direction:column;align-items:flex-end;line-height:1.12}
+.bal-pend{font-size:10px;font-weight:700;color:#ffe3a6;opacity:.95;margin-top:1px}
+.champ-pend{font-size:11px;color:#e7dbf3;opacity:.92;margin-top:2px;font-weight:700}
+.u-pend{display:block;font-size:10.5px;color:var(--muted);font-weight:700;margin-top:1px}
+.bet-note2{font-size:11px;color:var(--muted);margin:8px 0 2px;line-height:1.45}
