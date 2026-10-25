@@ -245,21 +245,21 @@ async function refreshResults(settleFn, applyHtFn) {
   const conflicts = [];
   for (const m of open) {
     const key = normName(m.home_team) + '|' + normName(m.away_team);
-    const f = fd.map[key];   // {ftH,ftA,htH,htA}
-    const o = oa.map[key];   // {ftH,ftA}
+    const f = fd.map[key];   // {ftH,ftA,htH,htA} — football-data (RESMİ, yalnızca BİTMİŞ maçlar)
+    const o = oa.map[key];   // {ftH,ftA} — Odds API (yalnızca completed maçlar)
     const teams = `${m.home_team} - ${m.away_team}`;
 
-    if (f && o) {
-      if (f.ftH === o.ftH && f.ftA === o.ftA) {
-        await settleFn(m.id, f.ftH, f.ftA, f.htH, f.htA); // dogrulandi -> yaz (IY: football-data)
-        settled++;
-      } else {
-        conflicts.push({ id: m.id, teams, fd: `${f.ftH}-${f.ftA}`, odds: `${o.ftH}-${o.ftA}`, reason: 'skorlar farkli' });
+    if (f) {
+      // football-data resmi kaynak: bitmiş maçı TEK BAŞINA yaz (Odds API doğrulaması beklenmez).
+      await settleFn(m.id, f.ftH, f.ftA, f.htH, f.htA);
+      settled++;
+      if (o && (f.ftH !== o.ftH || f.ftA !== o.ftA)) {
+        conflicts.push({ id: m.id, teams, fd: `${f.ftH}-${f.ftA}`, odds: `${o.ftH}-${o.ftA}`, reason: 'football-data ile Odds API farklı; football-data yazıldı' });
       }
-    } else if (f && !o) {
-      conflicts.push({ id: m.id, teams, fd: `${f.ftH}-${f.ftA}`, odds: '—', reason: 'Odds API skoru yok, doğrulanamadı' });
-    } else if (!f && o) {
-      conflicts.push({ id: m.id, teams, fd: '—', odds: `${o.ftH}-${o.ftA}`, reason: 'football-data skoru yok, doğrulanamadı' });
+    } else if (o) {
+      // football-data'da henüz yok ama Odds API bitmiş skoru verdi -> onunla yaz (IY bilinmez, sonradan tamamlanır).
+      await settleFn(m.id, o.ftH, o.ftA);
+      settled++;
     }
     // ikisi de yoksa: mac muhtemelen bitmedi -> atla
   }

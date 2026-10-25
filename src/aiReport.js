@@ -656,9 +656,25 @@ async function apiFootballDiag(match) {
 
 // ---------- Gemini (ucretsiz AI) ----------
 function extractJson(text) {
-  const i = text.indexOf('{'); const j = text.lastIndexOf('}');
-  if (i < 0 || j < 0 || j <= i) return null;
-  try { return JSON.parse(text.slice(i, j + 1)); } catch (_) { return null; }
+  if (!text) return null;
+  let t = String(text).trim();
+  // ```json ... ``` kod bloğu sarmalını temizle
+  t = t.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  const first = t.indexOf('{');
+  if (first < 0) return null;
+  // 1) En dıştan: ilk { ile son } arası
+  const last = t.lastIndexOf('}');
+  if (last > first) { try { return JSON.parse(t.slice(first, last + 1)); } catch (_) { /* dengeli taramaya düş */ } }
+  // 2) Dengeli parantez taraması (string/escape farkında) — fazladan metin ya da birden çok blok olsa da ilk tam objeyi bul
+  let depth = 0, inStr = false, esc = false, start = -1;
+  for (let k = first; k < t.length; k++) {
+    const c = t[k];
+    if (inStr) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false; continue; }
+    if (c === '"') { inStr = true; continue; }
+    if (c === '{') { if (depth === 0) start = k; depth++; }
+    else if (c === '}') { depth--; if (depth === 0 && start >= 0) { try { return JSON.parse(t.slice(start, k + 1)); } catch (_) { /* devam */ } } }
+  }
+  return null;
 }
 // Hesabin gercekten destekledigi modelleri Google'dan sor (ad tahmini yok).
 // Hem v1beta hem v1 ListModels denenir; hangi API surumu calisiyorsa o kullanilir.
@@ -694,10 +710,25 @@ function orderModels(names) {
 
 async function genContent(key, ver, model, prompt, useSearch) {
   const url = `https://generativelanguage.googleapis.com/${ver}/models/${model}:generateContent?key=${key}`;
-  const body = { contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.4, maxOutputTokens: 1800 } };
+  const gc = { temperature: 0.4, maxOutputTokens: 4096 };
+  // 2.5 "düşünen" modellerde düşünme bütçesini kapat → tüm token cevaba gitsin, JSON kırpılmasın.
+  if (/2\.5|flash-latest|pro-latest/i.test(model)) gc.thinkingConfig = { thinkingBudget: 0 };
+  // Aramasız turda saf JSON modu zorla (arama aracıyla birlikte KULLANILAMAZ).
+  if (!useSearch) gc.responseMimeType = 'application/json';
+  const body = { contents: [{ parts: [{ text: prompt }] }], generationConfig: gc };
   if (useSearch) body.tools = [{ google_search: {} }];
-  const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-  const txt = await res.text().catch(() => '');
+  const doFetch = async () => {
+    const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const txt = await res.text().catch(() => '');
+    return { res, txt };
+  };
+  let { res, txt } = await doFetch();
+  // Model thinkingConfig/responseMimeType desteklemiyorsa (400) → o alanları atıp bir kez daha dene.
+  if (!res.ok && res.status === 400 && (gc.thinkingConfig || gc.responseMimeType)
+      && /thinking|thought|responsemimetype|response_mime|not supported|unknown name|invalid/i.test(txt)) {
+    delete gc.thinkingConfig; delete gc.responseMimeType;
+    ({ res, txt } = await doFetch());
+  }
   return { status: res.status, ok: res.ok, txt };
 }
 
