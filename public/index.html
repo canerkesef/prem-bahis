@@ -2175,7 +2175,7 @@ async function renderAdmin(el) {
     <div class="card">
       <h3>🤖 Premier Lig Bot</h3>
       <p style="color:var(--muted);font-size:13px;line-height:1.5;margin-bottom:10px">
-        Bot oyuncu, ligin başından itibaren <b>her maça sabit 100 ASCU</b> yatırır ve <b>raporun sonuç kısmından</b> çıkan tahmini oynar (Ev/Deplasman/Beraberlik, 2.5 Alt-Üst veya KG). Rapor yoksa 1X2 favorisine düşer. Başlangıç bakiyesi oyuncularla aynıdır. Sonuçlandırma akışında otomatik güncellenir; aşağıdaki düğme geçmiş maçlar için <b>ilk kurulumu</b> hemen yapar.
+        Bot oyuncu, ligin başından itibaren <b>her maça sabit 100 ASCU</b> yatırır. Seçimi, raporun sonucu olan <b>en yüksek ihtimalli (en tutarlı oranlı)</b> tahmindir: maç sonucu (1-X-2), 2.5 Alt/Üst ve Karşılıklı Gol birlikte değerlendirilip en olası olan oynanır. Başlangıç bakiyesi oyuncularla aynıdır (12500). Sonuçlandırma akışında otomatik güncellenir; aşağıdaki düğme geçmiş maçlar için <b>ilk kurulumu</b> hemen yapar.
       </p>
       <div class="admin-tools" style="margin-bottom:6px">
         <button class="btn-sm btn-blue" id="bot-sync">🤖 Botu Senkronize Et</button>

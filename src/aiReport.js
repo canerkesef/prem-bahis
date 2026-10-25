@@ -892,11 +892,18 @@ async function generateReportFor(match) {
   report.data = stripEmpty(report.data);
   report.extras = stripEmpty(report.extras);
   if (report.h2h_note && isEmptyVal(report.h2h_note)) report.h2h_note = null;
-  // PREMİER LİG BOT + arayüz: raporun sonucundan oynanabilir seçim (deterministik, görünür).
+  // PREMİER LİG BOT + arayüz: raporun SONUÇ kısmı = çekirdek kriterler (1X2 / 2.5 Alt-Üst / KG)
+  // arasından EN YÜKSEK İHTİMALLİ (en düşük oranlı) seçim. Bot tam da bunu oynar (report.pick).
   try {
-    const { derivePick } = require('./bot');
-    const pk = derivePick({ conclusion: report.conclusion }, match, match.markets);
-    if (pk) report.pick = { market: pk.market, selection: pk.selection, odd: pk.odd, label: pk.label, src: pk.src };
+    const { bestPick } = require('./bot');
+    const pk = bestPick(match.markets);
+    if (pk) {
+      report.pick = { market: pk.market, selection: pk.selection, odd: pk.odd, label: pk.label, prob: pk.prob, src: pk.src };
+      report.conclusion = {
+        title: pk.label,
+        note: `Tüm kriterler arasında en yüksek ihtimal: ${pk.label} (yaklaşık %${pk.prob}, oran ${pk.odd.toFixed(2)}).`,
+      };
+    }
   } catch (e) { /* pick zorunlu değil */ }
   await sql`UPDATE matches SET report=${JSON.stringify(report)}::jsonb, report_at=now() WHERE id=${match.id}`;
   return report;

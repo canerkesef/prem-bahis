@@ -6,12 +6,12 @@
 //  HER maça SABİT 100 ASCU yatırır. Başlangıç bakiyesi gerçek oyuncularla
 //  aynıdır (START_BALANCE, varsayılan 12500).
 //
-//  SEÇİM: Botun kuponu, maçın "Saha Raporu"nun SONUÇ kısmından türetilir.
-//  conclusion.title serbest metin olduğundan (ör. "Ev Sahibi Favori",
-//  "Gollü Maç", "Karşılıklı Gol") metin ayrıştırılıp oynanabilir bir
-//  pazar+seçime çevrilir (1X2 / 2.5 Alt-Üst / KG). Rapor yoksa ya da metin
-//  çözülemezse 1X2'de en düşük oranlı sonuca (favori) düşülür — bu da zaten
-//  raporun oran bazlı sonucudur. Seçim DETERMİNİSTİKtir.
+//  SEÇİM (EN İYİ İHTİMAL): Bot, ÇEKİRDEK kriterleri birlikte değerlendirir —
+//  maç sonucu (1X2), 2.5 Alt/Üst, karşılıklı gol (KG) — ve bunların arasından
+//  EN DÜŞÜK oranlı (= en yüksek ihtimalli, en tutarlı) seçimi oynar. Yani illa
+//  1-X-2 değil; alt/üst ya da KG de olabilir. Bu seçim aynı zamanda raporun
+//  "Sonuç" kısmı olarak yazılır (generateReportFor). Seçim DETERMİNİSTİKtir ve
+//  rapor üretiminde report.pick olarak damgalanır; bot tam da onu oynar.
 //
 //  botSync(): bot kullanıcısını oluşturur (yoksa) ve bot kuponu olmayan tüm
 //  maçlara kuponunu yerleştirir. Maç zaten sonuçlanmışsa kuponu anında
@@ -38,84 +38,53 @@ function parseMk(m) {
   return m;
 }
 
-// Türkçe metni sadeleştir (küçük harf + aksan kaldır) -> anahtar kelime eşleşmesi için.
-function norm(s) {
-  const map = { 'ç': 'c', 'ğ': 'g', 'ı': 'i', 'İ': 'i', 'ö': 'o', 'ş': 's', 'ü': 'u', 'â': 'a', 'î': 'i', 'û': 'u' };
-  return String(s || '').toLocaleLowerCase('tr-TR').replace(/[çğıİöşüâîû]/g, (c) => map[c] || c);
-}
+// Botun değerlendirdiği ÇEKİRDEK kriterler: maç sonucu (1X2), 2.5 gol (Alt/Üst),
+// karşılıklı gol (KG). Anahtarlar markets/settle ile BİREBİR aynı olmalı:
+// 1x2 -> '1'|'X'|'2', ou25 -> 'over'|'under', btts -> 'yes'|'no'.
+// Her adaya bir öncelik indeksi verilir (eşit oranda deterministik sıralama için).
+const BOT_CANDIDATES = [
+  ['1x2', '1', 'Ev Sahibi Galibiyeti'],
+  ['1x2', 'X', 'Beraberlik'],
+  ['1x2', '2', 'Deplasman Galibiyeti'],
+  ['ou25', 'over', '2.5 Üst'],
+  ['ou25', 'under', '2.5 Alt'],
+  ['btts', 'yes', 'Karşılıklı Gol Var'],
+  ['btts', 'no', 'Karşılıklı Gol Yok'],
+];
 
-// 1X2'de en düşük oranlı sonuç (favori). Raporun oran bazlı sonucuna karşılık gelir.
-function oddsFavorite(mk) {
-  const m = mk && mk['1x2'];
-  if (!m) return null;
-  const opts = [['1', num(m['1'])], ['X', num(m.X)], ['2', num(m['2'])]].filter(([, o]) => o);
-  if (!opts.length) return null;
-  opts.sort((a, b) => a[1] - b[1]);
-  const [sel, odd] = opts[0];
-  const label = sel === '1' ? 'Ev Sahibi Kazanır' : sel === '2' ? 'Deplasman Kazanır' : 'Beraberlik';
-  return { market: '1x2', selection: sel, odd, label, src: 'oran' };
-}
-
-// Rapor sonucu metnini (conclusion.title) oynanabilir pazar+seçime çevirir.
-// Seçimin oranı markets içinde yoksa null döner (çağıran favoriye düşer).
-function parseConclusion(title, match, mk) {
-  const t = norm(title);
-  if (!t) return null;
-  const home = norm(match.home_team), away = norm(match.away_team);
-  const has = (...ws) => ws.some((w) => t.includes(norm(w)));
-  // Seçim oranı varsa paketle.
-  const make = (market, selection, label, src) => {
+// EN İYİ İHTİMAL: çekirdek kriterler arasında EN DÜŞÜK oranlı (en yüksek ihtimalli)
+// seçimi döndürür. Oranlar aynı Poisson modelinden geldiği için pazarlar arası
+// karşılaştırma tutarlıdır. Döner: {market, selection, odd, label, prob}.
+function bestPick(markets) {
+  const mk = parseMk(markets);
+  if (!mk) return null;
+  let best = null;
+  BOT_CANDIDATES.forEach(([market, selection, label], idx) => {
     const o = mk[market] && num(mk[market][selection]);
-    return o ? { market, selection, odd: o, label, src } : null;
+    if (!o) return;
+    if (!best || o < best.odd - 1e-9) best = { market, selection, odd: o, label, idx };
+  });
+  if (!best) return null;
+  return {
+    market: best.market, selection: best.selection, odd: best.odd,
+    label: best.label, prob: Math.round(100 / best.odd), src: 'en-iyi-ihtimal',
   };
-  // Olumsuzlama: "ev sahibi favori değil" gibi -> yön ters çevrilmesin, atla.
-  const negated = has('degil', 'zor', 'surpriz');
-
-  // Kazananı belirten ifadeler (maç sonucu = birincil yorum).
-  const homeWin = !negated && (
-    has('ev sahibi favori', 'ev sahibi kazan', 'ev sahibi ustun', 'ev sahibi galib', 'ev sahibi onde', 'ev favori', 'ic saha')
-    || (home && home.length > 2 && t.includes(home) && has('favori', 'kazan', 'ustun', 'galib', 'onde'))
-  );
-  const awayWin = !negated && (
-    has('deplasman favori', 'deplasman kazan', 'deplasman ustun', 'deplasman galib', 'deplasman onde', 'dep favori', 'dis saha')
-    || (away && away.length > 2 && t.includes(away) && has('favori', 'kazan', 'ustun', 'galib', 'onde'))
-  );
-  const draw = has('beraberlik', 'berabere', 'gol paylas', 'puan paylas', 'esitlik', 'baraj', 'denk guc');
-
-  // Gol beklentisi. "az gol(lü)" hem alt hem üst anahtarı içerebildiğinden alt önceliklidir.
-  // Tek başına "üst/alt" sıralama anlamına da gelebildiği için kullanılmaz; net ifade aranır.
-  const under = has('az gol', 'gol az', 'dusuk skor', '2.5 alt', 'kisir', 'temkinli', 'kapali mac', 'cekingen');
-  const over = !under && has('gollu', 'bol gol', 'cok gol', '2.5 ust', 'gol duello', 'gol yagmur', 'acik mac', 'gol sans');
-
-  // Karşılıklı gol.
-  const bttsYes = has('karsilikli gol', 'kg var', 'iki takim da gol', 'iki taraf gol');
-  const bttsNo = has('kg yok', 'tek taraf');
-
-  // Öncelik: net kazanan > beraberlik > gol üst/alt > KG.
-  let p = null;
-  if (homeWin && !awayWin) p = make('1x2', '1', 'Ev Sahibi Kazanır', 'rapor');
-  else if (awayWin && !homeWin) p = make('1x2', '2', 'Deplasman Kazanır', 'rapor');
-  if (!p && draw) p = make('1x2', 'X', 'Beraberlik', 'rapor');
-  if (!p && over && !under) p = make('ou25', 'ust', '2.5 Üst', 'rapor');
-  if (!p && under && !over) p = make('ou25', 'alt', '2.5 Alt', 'rapor');
-  if (!p && bttsYes && !bttsNo) p = make('btts', 'yes', 'KG Var', 'rapor');
-  if (!p && bttsNo && !bttsYes) p = make('btts', 'no', 'KG Yok', 'rapor');
-  return p;
 }
 
-// Nihai bot seçimi: önce rapora kayıtlı yapısal pick, sonra sonuç metnini ayrıştır,
-// sonra 1X2 oran favorisi.
+// Nihai bot seçimi: rapora damgalanmış pick (oranı geçerliyse) ya da anlık en iyi ihtimal.
+// İkisi de aynı deterministik hesaptan geldiği için sonuç tutarlıdır.
 function derivePick(report, match, markets) {
   const mk = parseMk(markets);
   if (!mk) return null;
-  // Rapor üretiminde damgalanmış hazır pick (oranı hâlâ geçerliyse kullan).
   if (report && report.pick && report.pick.market && report.pick.selection) {
     const o = mk[report.pick.market] && num(mk[report.pick.market][report.pick.selection]);
-    if (o) return { market: report.pick.market, selection: report.pick.selection, odd: o, label: report.pick.label || '', src: report.pick.src || 'rapor' };
+    if (o) return {
+      market: report.pick.market, selection: report.pick.selection, odd: o,
+      label: report.pick.label || '', prob: report.pick.prob || Math.round(100 / o),
+      src: report.pick.src || 'en-iyi-ihtimal',
+    };
   }
-  const title = report && report.conclusion && report.conclusion.title;
-  const parsed = title ? parseConclusion(title, match, mk) : null;
-  return parsed || oddsFavorite(mk);
+  return bestPick(mk);
 }
 
 // Bot kullanıcısını garanti eder (yoksa oluşturur). Bot giriş yapamaz:
@@ -195,4 +164,4 @@ async function botSync() {
   return { ok: true, placed, graded, botId: bot.id };
 }
 
-module.exports = { botSync, ensureBot, derivePick, parseConclusion, oddsFavorite, BOT_NAME };
+module.exports = { botSync, ensureBot, derivePick, bestPick, BOT_NAME };
