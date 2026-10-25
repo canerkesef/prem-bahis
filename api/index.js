@@ -781,6 +781,33 @@ app.post('/api/admin/bot-sync', requireAdmin, async (req, res) => {
   catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 
+// Mevcut ACIK maclarin markets verisini, SAKLANAN 1X2 + Alt/Ust oranlarindan
+// YENIDEN hesaplar (Odds API GEREKMEZ). Boylece yeni eklenen pazarlar (ornegin
+// "Hangi Yari Daha Cok Gol") var olan maclara da gelir. Yeniden turetme cekirdek
+// oranlari AYNEN korur (marj iki kez uygulanmaz); sadece eksik pazarlari ekler.
+app.post('/api/admin/recompute-markets', requireAdmin, async (req, res) => {
+  try {
+    const rows = await sql`SELECT id, markets FROM matches WHERE status='open'`;
+    let updated = 0, skipped = 0;
+    for (const r of rows) {
+      let mk = r.markets;
+      if (typeof mk === 'string') { try { mk = JSON.parse(mk); } catch { mk = null; } }
+      const x = mk && mk['1x2'];
+      if (!x || !x['1'] || !x.X || !x['2']) { skipped++; continue; }
+      const base = {
+        odd_1: Number(x['1']), odd_x: Number(x.X), odd_2: Number(x['2']),
+        odd_over: mk.ou25 && Number(mk.ou25.over) || null,
+        odd_under: mk.ou25 && Number(mk.ou25.under) || null,
+      };
+      const fresh = computeMarkets(base);
+      if (!fresh) { skipped++; continue; }
+      await sql`UPDATE matches SET markets=${JSON.stringify(fresh)}::jsonb, last_update=now() WHERE id=${r.id}`;
+      updated++;
+    }
+    res.json({ ok: true, updated, skipped });
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+
 app.post('/api/admin/matches', requireAdmin, async (req, res) => {
   try {
     const b = req.body || {};

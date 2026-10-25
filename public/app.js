@@ -1468,7 +1468,11 @@ async function renderAdmin(el) {
       <div class="admin-tools">
         <button class="btn-sm btn-blue" id="refresh-matches">Maçları & Oranları Çek</button>
         <button class="btn-sm btn-blue" id="refresh-results">Sonuçları Çek & Hesapla</button>
+        <button class="btn-sm btn-ok" id="recompute-markets">🧮 Oranları Yeniden Hesapla (yeni pazarlar)</button>
       </div>
+      <p style="color:var(--muted);font-size:12px;line-height:1.5;margin:8px 0 0">
+        "Oranları Yeniden Hesapla": mevcut açık maçlara yeni eklenen pazarları (ör. Hangi Yarı Daha Çok Gol) işler. Odds API harcamaz; saklı oranlardan türetir.
+      </p>
       <div id="admin-msg" style="margin-top:10px;font-size:13px;color:var(--muted)"></div>
     </div>
 
@@ -1563,6 +1567,20 @@ async function renderAdmin(el) {
     } catch (e) {
       msg.textContent = e.message;
     }
+  });
+  if ($('#recompute-markets')) $('#recompute-markets').addEventListener('click', async () => {
+    const btn = $('#recompute-markets'); const msg = $('#admin-msg');
+    if (btn.disabled) return;
+    btn.disabled = true; const old = btn.textContent; btn.textContent = 'Hesaplanıyor…';
+    msg.style.color = 'var(--muted)'; msg.textContent = 'Açık maçların oranları yeniden hesaplanıyor…';
+    try {
+      const r = await api('/admin/recompute-markets', { method: 'POST' });
+      if (r.error) { msg.style.color = 'var(--danger)'; msg.textContent = r.error; return; }
+      msg.style.color = 'var(--ok)';
+      msg.textContent = `${r.updated} maç güncellendi${r.skipped ? `, ${r.skipped} atlandı` : ''}. Yeni pazarlar artık açık maçlarda görünür.`;
+      toast('Oranlar yeniden hesaplandı ✅');
+    } catch (e) { msg.style.color = 'var(--danger)'; msg.textContent = e.message; }
+    finally { btn.disabled = false; btn.textContent = old; }
   });
   $('#refresh-results').addEventListener('click', async () => {
     const msg = $('#admin-msg');
