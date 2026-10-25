@@ -52,6 +52,8 @@ function ensureSchema() {
   if (schemaReady) return schemaReady;
   schemaReady = (async () => {
     await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS eliminated boolean NOT NULL DEFAULT false`;
+    // PREMİER LİG BOT: bot oyuncu bayragi (arayuzde rozet + gercek oyunculardan ayirt etmek icin).
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_bot boolean NOT NULL DEFAULT false`;
     // Ilk yari skoru (sonradan doldurulabilir). NULL => devre skoru henuz islenmedi.
     await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS ht_home integer`;
     await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS ht_away integer`;

@@ -134,6 +134,7 @@ input{font-family:inherit}
 .rank.gold{background:#fbeecb;color:var(--gold)}
 .uname{font-weight:700;font-size:14px;color:var(--ink)}
 .admin-tag{font-size:10px;background:#f3e0f0;color:var(--pri2);padding:2px 6px;border-radius:6px;margin-left:6px;vertical-align:middle}
+.bot-tag{font-size:10px;font-weight:800;background:linear-gradient(135deg,#1e293b,#334155);color:#7dd3fc;padding:2px 7px;border-radius:6px;margin-left:6px;vertical-align:middle;letter-spacing:.3px;border:1px solid #38bdf8}
 .ubalance{color:var(--pri);font-weight:800;font-size:14px}
 
 /* ---------- Admin / kartlar ---------- */

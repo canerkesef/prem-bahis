@@ -1129,7 +1129,7 @@ function championCard(u, leaderDays) {
   return `<div class="champion" data-uid="${u.id}">
     <div class="champ-glow"></div>
     <span class="champ-logo cat-bg" role="img" aria-label="Premier Lig"></span>
-    <div class="champ-name">${u.username}${u.is_admin ? '<span class="admin-tag">admin</span>' : ''}${you}${elim}</div>
+    <div class="champ-name">${u.username}${u.is_bot ? '<span class="bot-tag">🤖 BOT</span>' : ''}${u.is_admin ? '<span class="admin-tag">admin</span>' : ''}${you}${elim}</div>
     <div class="champ-bal">${fmtTL(u.balance)}</div>
     ${Number(u.pending_stake) > 0 ? `<div class="champ-pend">${fmtTL(u.pending_stake)} kuponda</div>` : ''}
     <div class="champ-days">${daysTxt}</div>
@@ -1150,7 +1150,7 @@ function playerRow(u, rank, leadBal) {
       <div class="prow-left">
         <div class="rank ${medal}">${rank}</div>
         <div class="pinfo">
-          <div class="uname">${u.username}${u.is_admin ? '<span class="admin-tag">admin</span>' : ''}${elim}${you}${Number(u.leader_total_days) >= 1 ? `<span class="lead-badge" title="Toplam liderlik süresi"><span class="logo-ico cat-bg"></span>${u.leader_total_days}g</span>` : ''}${Number(u.last_total_days) >= 1 ? `<span class="last-badge" title="Toplam sonunculuk süresi">${BUCKET_SVG}${u.last_total_days}g</span>` : ''}</div>
+          <div class="uname">${u.username}${u.is_bot ? '<span class="bot-tag">🤖 BOT</span>' : ''}${u.is_admin ? '<span class="admin-tag">admin</span>' : ''}${elim}${you}${Number(u.leader_total_days) >= 1 ? `<span class="lead-badge" title="Toplam liderlik süresi"><span class="logo-ico cat-bg"></span>${u.leader_total_days}g</span>` : ''}${Number(u.last_total_days) >= 1 ? `<span class="last-badge" title="Toplam sonunculuk süresi">${BUCKET_SVG}${u.last_total_days}g</span>` : ''}</div>
           <div class="pgap">Lidere fark: <b>-${fmtTL(gap)}</b></div>
         </div>
       </div>
@@ -1200,7 +1200,7 @@ async function renderUserDetail(uid) {
   el.innerHTML = `
     <button class="btn-ghost" id="back-btn" style="margin-bottom:14px">← Oyuncular</button>
     <div class="card">
-      <h3>${user.username}${user.is_admin ? '<span class="admin-tag">admin</span>' : ''}${user.eliminated ? '<span class="elim-tag">Kaybetti</span>' : ''}</h3>
+      <h3>${user.username}${user.is_bot ? '<span class="bot-tag">🤖 BOT</span>' : ''}${user.is_admin ? '<span class="admin-tag">admin</span>' : ''}${user.eliminated ? '<span class="elim-tag">Kaybetti</span>' : ''}</h3>
       <div class="coupon-meta" style="margin:0">
         <span>Bakiye: <b style="color:var(--gold)">${fmtTL(user.balance)}</b></span>
         ${Number(user.pending) > 0 ? `<span>Kuponda: <b>${fmtTL(user.pending)}</b></span>` : ''}
@@ -1499,6 +1499,17 @@ async function renderAdmin(el) {
     </div>
 
     <div class="card">
+      <h3>🤖 Premier Lig Bot</h3>
+      <p style="color:var(--muted);font-size:13px;line-height:1.5;margin-bottom:10px">
+        Bot oyuncu, ligin başından itibaren <b>her maça sabit 100 ASCU</b> yatırır ve <b>raporun sonuç kısmından</b> çıkan tahmini oynar (Ev/Deplasman/Beraberlik, 2.5 Alt-Üst veya KG). Rapor yoksa 1X2 favorisine düşer. Başlangıç bakiyesi oyuncularla aynıdır. Sonuçlandırma akışında otomatik güncellenir; aşağıdaki düğme geçmiş maçlar için <b>ilk kurulumu</b> hemen yapar.
+      </p>
+      <div class="admin-tools" style="margin-bottom:6px">
+        <button class="btn-sm btn-blue" id="bot-sync">🤖 Botu Senkronize Et</button>
+      </div>
+      <div id="bot-msg" style="margin:6px 0 2px;font-size:13px;color:var(--muted)"></div>
+    </div>
+
+    <div class="card">
       <h3>✏️ Sonucu Düzelt (Kural 8)</h3>
       <p style="color:var(--muted);font-size:13px;line-height:1.5;margin-bottom:12px">
         Yanlış sonuçlanan maçı doğru skorla yeniden hesaplar. Kuponlar yeni skora göre
@@ -1654,6 +1665,21 @@ async function renderAdmin(el) {
       am.textContent = t;
       toast('AI rapor üretimi bitti');
     } catch (e) { am.style.color = 'var(--danger)'; am.textContent = e.message; }
+  });
+
+  if ($('#bot-sync')) $('#bot-sync').addEventListener('click', async () => {
+    const btn = $('#bot-sync'); const bm = $('#bot-msg');
+    if (btn.disabled) return;
+    btn.disabled = true; const old = btn.textContent; btn.textContent = 'Senkronize ediliyor…';
+    bm.style.color = 'var(--muted)'; bm.textContent = 'Bot kuponları yerleştiriliyor…';
+    try {
+      const r = await api('/admin/bot-sync', { method: 'POST' });
+      if (r.error) { bm.style.color = 'var(--danger)'; bm.textContent = r.error; return; }
+      bm.style.color = 'var(--ok)';
+      bm.textContent = `Bot güncellendi: ${r.placed || 0} yeni kupon (${r.graded || 0} geçmiş maç notlandı).`;
+      toast('Bot senkronize edildi — "Oyuncular" sekmesinden durumunu görebilirsin');
+    } catch (e) { bm.style.color = 'var(--danger)'; bm.textContent = e.message; }
+    finally { btn.disabled = false; btn.textContent = old; }
   });
 
   if ($('#ai-refresh')) $('#ai-refresh').addEventListener('click', async () => {

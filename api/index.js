@@ -10,6 +10,7 @@ const { seedSampleMatches } = require('../src/seed');
 const { refreshMatches, refreshResults, hasApi, fetchStandings, normName, fetchLiveScores } = require('../src/oddsApi');
 const { settleMatch, voidMatch, applyHalfTime } = require('../src/settle');
 const { generatePending, apiFootballDiag, regenerateReports, fplLeaderboards, fplFixtureGoals, fplGoalsFor, fplGameweeks } = require('../src/aiReport');
+const { botSync } = require('../src/bot');
 const { computeMarkets } = require('../src/odds-derive');
 
 const app = express();
@@ -545,7 +546,7 @@ app.get('/api/users', requireAuth, async (req, res) => {
     }
 
     // 2) Oyuncular (guncel leader_ms + last_ms ile).
-    const rows = await sql`SELECT id, username, is_admin, balance, eliminated, COALESCE(leader_ms,0) AS leader_ms, COALESCE(last_ms,0) AS last_ms, COALESCE((SELECT SUM(stake) FROM coupons c WHERE c.user_id=users.id AND c.status='pending'),0) AS pending FROM users WHERE status='approved' ORDER BY balance DESC`;
+    const rows = await sql`SELECT id, username, is_admin, is_bot, balance, eliminated, COALESCE(leader_ms,0) AS leader_ms, COALESCE(last_ms,0) AS last_ms, COALESCE((SELECT SUM(stake) FROM coupons c WHERE c.user_id=users.id AND c.status='pending'),0) AS pending FROM users WHERE status='approved' ORDER BY balance DESC`;
 
     // Kupon istatistikleri (kazanan/kaybeden/bekleyen + tutturulan toplam oran).
     const stats = await sql`
@@ -577,7 +578,7 @@ app.get('/api/users', requireAuth, async (req, res) => {
       const ongoingLast = id === lastId && lastSince ? now - new Date(lastSince).getTime() : 0;
       const totalLastDays = Math.floor((Number(u.last_ms) + ongoingLast) / 86400000);
       return {
-        id, username: u.username, is_admin: !!u.is_admin,
+        id, username: u.username, is_admin: !!u.is_admin, is_bot: !!u.is_bot,
         balance: Number(u.balance), eliminated: !!u.eliminated,
         pending_stake: Number(u.pending) || 0,
         won: Number(s.won || 0), lost: Number(s.lost || 0), pending: Number(s.pending || 0),
@@ -596,7 +597,7 @@ app.get('/api/users', requireAuth, async (req, res) => {
 
 app.get('/api/users/:id', requireAuth, async (req, res) => {
   try {
-    const rows = await sql`SELECT id, username, is_admin, balance, eliminated, created_at FROM users WHERE id=${Number(req.params.id)} AND status='approved'`;
+    const rows = await sql`SELECT id, username, is_admin, is_bot, balance, eliminated, created_at FROM users WHERE id=${Number(req.params.id)} AND status='approved'`;
     const u = rows[0];
     if (!u) return res.status(404).json({ error: 'Kullanici bulunamadi.' });
     const coupons = (await sql`SELECT * FROM coupons WHERE user_id=${Number(u.id)} ORDER BY commence_time DESC, created_at DESC`).map(couponOut);
@@ -611,7 +612,7 @@ app.get('/api/users/:id', requireAuth, async (req, res) => {
       { total: 0, won: 0, lost: 0, pending: 0 }
     );
     const pending = coupons.filter((c) => c.status === 'pending').reduce((s, c) => s + (Number(c.stake) || 0), 0);
-    res.json({ user: { id: Number(u.id), username: u.username, is_admin: !!u.is_admin, balance: Number(u.balance), pending, eliminated: !!u.eliminated, created_at: u.created_at }, coupons, stats });
+    res.json({ user: { id: Number(u.id), username: u.username, is_admin: !!u.is_admin, is_bot: !!u.is_bot, balance: Number(u.balance), pending, eliminated: !!u.eliminated, created_at: u.created_at }, coupons, stats });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });
   }
@@ -707,6 +708,7 @@ app.post('/api/admin/refresh-matches', requireAdmin, async (req, res) => {
 
 app.post('/api/admin/refresh-results', requireAdmin, async (req, res) => {
   try {
+    try { await botSync(); } catch (e) { console.error('[bot] sync', e.message); }
     const r = await refreshResults(
       (id, h, a, htH, htA) => settleMatch(id, h, a, htH, htA),
       (id, htH, htA) => applyHalfTime(id, htH, htA)
@@ -733,6 +735,7 @@ async function maybeAutoSettle() {
     WHERE id=1 AND (last_auto_settle IS NULL OR last_auto_settle < now() - (${cd} * interval '1 minute'))
     RETURNING id`;
   if (!claim.length) return { ran: false, reason: 'cooldown' };
+  try { await botSync(); } catch (e) { console.error('[bot] sync', e.message); }
   const r = await refreshResults(
     (id, h, a, htH, htA) => settleMatch(id, h, a, htH, htA),
     (id, htH, htA) => applyHalfTime(id, htH, htA)
@@ -760,6 +763,7 @@ app.post('/api/admin/matches/:id/settle', requireAdmin, async (req, res) => {
     return res.status(400).json({ error: 'Devre skoru gecersiz (0+ ve mac sonu skorundan buyuk olamaz).' });
   }
   const correct = req.body.correct === true; // KURAL 8: yonetici duzeltmesi
+  try { await botSync(); } catch (e) { console.error('[bot] sync', e.message); }
   try { res.json(await settleMatch(req.params.id, h, a, haveHT ? htH : null, haveHT ? htA : null, { correct })); }
   catch (e) { res.status(400).json({ error: String(e.message || e) }); }
 });
@@ -767,6 +771,14 @@ app.post('/api/admin/matches/:id/settle', requireAdmin, async (req, res) => {
 app.post('/api/admin/matches/:id/void', requireAdmin, async (req, res) => {
   try { res.json(await voidMatch(req.params.id)); }
   catch (e) { res.status(400).json({ error: String(e.message || e) }); }
+});
+
+// PREMİER LİG BOT: botu tum maclara gore senkronize et (geriye donuk + acik).
+// Idempotent: zaten kupon olan maclara dokunmaz. Ilk kurulumda bir kez cagirilir,
+// ayrica sonuclandirma akislarinda otomatik calisir.
+app.post('/api/admin/bot-sync', requireAdmin, async (req, res) => {
+  try { res.json(await botSync()); }
+  catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 
 app.post('/api/admin/matches', requireAdmin, async (req, res) => {
@@ -797,6 +809,7 @@ app.all('/api/cron/refresh', async (req, res) => {
   if (req.headers.authorization !== `Bearer ${secret}`) return res.status(401).json({ error: 'Yetkisiz.' });
   try {
     const m = await refreshMatches();
+    try { await botSync(); } catch (e) { console.error('[bot] sync', e.message); }
     const r = await refreshResults(
       (id, h, a, htH, htA) => settleMatch(id, h, a, htH, htA),
       (id, htH, htA) => applyHalfTime(id, htH, htA)

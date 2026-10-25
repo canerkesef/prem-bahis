@@ -209,4 +209,4 @@ async function voidMatch(matchId) {
   return { ok: true };
 }
 
-module.exports = { settleMatch, voidMatch, applyHalfTime };
+module.exports = { settleMatch, voidMatch, applyHalfTime, isWinner, iymsWinner };

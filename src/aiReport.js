@@ -892,6 +892,12 @@ async function generateReportFor(match) {
   report.data = stripEmpty(report.data);
   report.extras = stripEmpty(report.extras);
   if (report.h2h_note && isEmptyVal(report.h2h_note)) report.h2h_note = null;
+  // PREMİER LİG BOT + arayüz: raporun sonucundan oynanabilir seçim (deterministik, görünür).
+  try {
+    const { derivePick } = require('./bot');
+    const pk = derivePick({ conclusion: report.conclusion }, match, match.markets);
+    if (pk) report.pick = { market: pk.market, selection: pk.selection, odd: pk.odd, label: pk.label, src: pk.src };
+  } catch (e) { /* pick zorunlu değil */ }
   await sql`UPDATE matches SET report=${JSON.stringify(report)}::jsonb, report_at=now() WHERE id=${match.id}`;
   return report;
 }
