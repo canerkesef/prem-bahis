@@ -2,9 +2,10 @@
 
 // ============================================================
 //  PREMİER LİG BOT
-//  Yarışmaya bir "bot oyuncu" olarak katılır. Ligin başından itibaren
-//  HER maça SABİT 100 ASCU yatırır. Başlangıç bakiyesi gerçek oyuncularla
-//  aynıdır (START_BALANCE, varsayılan 12500).
+//  Yarışmaya bir "bot oyuncu" olarak katılır. YALNIZCA saha raporu ÜRETİLMİŞ
+//  maçlara SABİT 100 ASCU yatırır (rapor maç günü gece 00:00'da üretilir; bot da
+//  o an, güncel ihtimallere göre kupon yapar — geleceğe dönük erken bahis YOK).
+//  Başlangıç bakiyesi gerçek oyuncularla aynıdır (START_BALANCE, varsayılan 12500).
 //
 //  SEÇİM (EN İYİ İHTİMAL): Bot, ÇEKİRDEK kriterleri birlikte değerlendirir —
 //  maç sonucu (1X2), 2.5 Alt/Üst, karşılıklı gol (KG) — ve bunların arasından
@@ -137,13 +138,47 @@ async function botBetMatchTx(tx, botId, match) {
   return true;
 }
 
-// Botu tüm maçlara göre senkronize eder (geriye dönük + açık maçlar).
-// Her maç kendi transaction'ında işlenir (idempotent, kısmi başarı güvenli).
-async function botSync() {
+// Botu senkronize eder. KURAL: bot SADECE saha raporu ÜRETİLMİŞ maçlara kupon yapar
+// (raporu maç günü gece 00:00'da üretildiği için bot da o an kupon oluşturur —
+// geleceğe/erken bahis YOK; ihtimaller, sakatlıklar değişebileceği için).
+//
+//  - rebuild=true: botun TÜM kuponlarını siler, bakiyeyi başlangıca sıfırlar ve
+//    yalnızca raporu olan maçlara yeniden kurar (yanlış/erken geçmişi temizlemek için;
+//    admin düğmesi bunu çağırır). Geçmiş (sonuçlanmış) raporlu maçlar anında notlanır.
+//  - rebuild=false (otomatik akışlar): raporu OLMAYAN maçlardaki BEKLEYEN bot kuponlarını
+//    siler + iade eder (erken bahisleri toplar) ve raporu olup bot kuponu olmayan maçlara
+//    kuponunu ekler. İdempotent.
+async function botSync(opts = {}) {
+  const rebuild = opts.rebuild === true;
   const bot = await ensureBot();
+
+  if (rebuild) {
+    await sql.begin(async (tx) => {
+      await tx`DELETE FROM coupons WHERE user_id=${bot.id}`;
+      await tx`UPDATE users SET balance=${START_BALANCE}, eliminated=false WHERE id=${bot.id}`;
+    });
+    bot.balance = START_BALANCE;
+  }
+
+  // TEMİZLİK: raporu OLMAYAN maçlardaki bekleyen bot kuponlarını sil + bahsi iade et
+  // (eski sürümün geleceğe/erken açtığı bahisler buradan toplanır).
+  let removed = 0;
+  await sql.begin(async (tx) => {
+    const stray = await tx`
+      SELECT c.id, c.stake FROM coupons c
+      JOIN matches m ON m.id=c.match_id
+      WHERE c.user_id=${bot.id} AND c.status='pending' AND m.report IS NULL`;
+    for (const c of stray) {
+      await tx`DELETE FROM coupons WHERE id=${c.id}`;
+      await tx`UPDATE users SET balance = balance + ${c.stake} WHERE id=${bot.id}`;
+      removed++;
+    }
+  });
+
+  // YERLEŞTİR: YALNIZCA raporu olan maçlar. Bot kuponu yoksa ekle.
   const matches = await sql`
     SELECT id, home_team, away_team, commence_time, status, home_score, away_score, markets, report
-    FROM matches ORDER BY commence_time ASC`;
+    FROM matches WHERE report IS NOT NULL ORDER BY commence_time ASC`;
   let placed = 0, graded = 0;
   for (const m of matches) {
     try {
@@ -155,13 +190,14 @@ async function botSync() {
       console.error('[bot] mac senkron hatasi', m.id, e.message);
     }
   }
+
   // Bot iflas ettiyse elenme bayrağını güncelle (KURAL 13 ile uyumlu).
   await sql`
     UPDATE users u SET eliminated =
       (u.balance < ${MIN_STAKE} AND NOT EXISTS (
         SELECT 1 FROM coupons c WHERE c.user_id=u.id AND c.status='pending'))
     WHERE u.id=${bot.id}`;
-  return { ok: true, placed, graded, botId: bot.id };
+  return { ok: true, placed, graded, removed, rebuilt: rebuild, botId: bot.id };
 }
 
 module.exports = { botSync, ensureBot, derivePick, bestPick, BOT_NAME };

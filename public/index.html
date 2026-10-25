@@ -2184,10 +2184,10 @@ async function renderAdmin(el) {
     <div class="card">
       <h3>🤖 Premier Lig Bot</h3>
       <p style="color:var(--muted);font-size:13px;line-height:1.5;margin-bottom:10px">
-        Bot oyuncu, ligin başından itibaren <b>her maça sabit 100 ASCU</b> yatırır. Seçimi, raporun sonucu olan <b>en yüksek ihtimalli (en tutarlı oranlı)</b> tahmindir: maç sonucu (1-X-2), 2.5 Alt/Üst ve Karşılıklı Gol birlikte değerlendirilip en olası olan oynanır. Başlangıç bakiyesi oyuncularla aynıdır (12500). Sonuçlandırma akışında otomatik güncellenir; aşağıdaki düğme geçmiş maçlar için <b>ilk kurulumu</b> hemen yapar.
+        Bot oyuncu, <b>yalnızca saha raporu üretilen maçlara</b> sabit 100 ASCU yatırır — rapor maç günü gece 00:00'da üretildiği için bot da o an, güncel ihtimallere göre kupon yapar (geleceğe dönük erken bahis yok). Seçimi, raporun sonucu olan <b>en yüksek ihtimalli (en tutarlı oranlı)</b> tahmindir: maç sonucu (1-X-2), 2.5 Alt/Üst ve KG birlikte değerlendirilip en olası olan oynanır. Başlangıç bakiyesi 12500. Aşağıdaki düğme botu <b>temiz yeniden kurar</b>: tüm kuponlarını silip bakiyeyi sıfırlar ve yalnızca raporu olan maçlara yeniden oynar (yanlış/erken geçmişi temizler).
       </p>
       <div class="admin-tools" style="margin-bottom:6px">
-        <button class="btn-sm btn-blue" id="bot-sync">🤖 Botu Senkronize Et</button>
+        <button class="btn-sm btn-blue" id="bot-sync">🤖 Botu Yeniden Kur</button>
       </div>
       <div id="bot-msg" style="margin:6px 0 2px;font-size:13px;color:var(--muted)"></div>
     </div>
@@ -2367,14 +2367,15 @@ async function renderAdmin(el) {
   if ($('#bot-sync')) $('#bot-sync').addEventListener('click', async () => {
     const btn = $('#bot-sync'); const bm = $('#bot-msg');
     if (btn.disabled) return;
-    btn.disabled = true; const old = btn.textContent; btn.textContent = 'Senkronize ediliyor…';
-    bm.style.color = 'var(--muted)'; bm.textContent = 'Bot kuponları yerleştiriliyor…';
+    if (!confirm('Bot TEMİZ yeniden kurulacak: tüm bot kuponları silinip bakiye sıfırlanır ve yalnızca saha raporu olan maçlara yeniden oynanır. Devam?')) return;
+    btn.disabled = true; const old = btn.textContent; btn.textContent = 'Yeniden kuruluyor…';
+    bm.style.color = 'var(--muted)'; bm.textContent = 'Bot sıfırlanıp raporu olan maçlara göre yeniden kuruluyor…';
     try {
       const r = await api('/admin/bot-sync', { method: 'POST' });
       if (r.error) { bm.style.color = 'var(--danger)'; bm.textContent = r.error; return; }
       bm.style.color = 'var(--ok)';
-      bm.textContent = `Bot güncellendi: ${r.placed || 0} yeni kupon (${r.graded || 0} geçmiş maç notlandı).`;
-      toast('Bot senkronize edildi — "Oyuncular" sekmesinden durumunu görebilirsin');
+      bm.textContent = `Bot yeniden kuruldu: ${r.placed || 0} kupon (raporlu maçlar), ${r.graded || 0} geçmiş maç notlandı${r.removed ? `, ${r.removed} erken bahis temizlendi` : ''}.`;
+      toast('Bot yeniden kuruldu — "Oyuncular" sekmesinden durumunu görebilirsin');
     } catch (e) { bm.style.color = 'var(--danger)'; bm.textContent = e.message; }
     finally { btn.disabled = false; btn.textContent = old; }
   });

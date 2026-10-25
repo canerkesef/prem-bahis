@@ -773,11 +773,12 @@ app.post('/api/admin/matches/:id/void', requireAdmin, async (req, res) => {
   catch (e) { res.status(400).json({ error: String(e.message || e) }); }
 });
 
-// PREMİER LİG BOT: botu tum maclara gore senkronize et (geriye donuk + acik).
-// Idempotent: zaten kupon olan maclara dokunmaz. Ilk kurulumda bir kez cagirilir,
-// ayrica sonuclandirma akislarinda otomatik calisir.
+// PREMİER LİG BOT: botu TEMİZ yeniden kurar (rebuild). Tum bot kuponlarini siler,
+// bakiyeyi baslangica sifirlar ve YALNIZCA saha raporu olan maclara yeniden oynar
+// (gelecege/erken bahis temizlenir). Sonuclanan raporlu maclar aninda notlanir.
+// Ilk kurulumda / yanlis gecmisi duzeltmek icin bir kez basilir; guvenle tekrar basilabilir.
 app.post('/api/admin/bot-sync', requireAdmin, async (req, res) => {
-  try { res.json(await botSync()); }
+  try { res.json(await botSync({ rebuild: true })); }
   catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 
@@ -836,14 +837,16 @@ app.all('/api/cron/refresh', async (req, res) => {
   if (req.headers.authorization !== `Bearer ${secret}`) return res.status(401).json({ error: 'Yetkisiz.' });
   try {
     const m = await refreshMatches();
-    try { await botSync(); } catch (e) { console.error('[bot] sync', e.message); }
     const r = await refreshResults(
       (id, h, a, htH, htA) => settleMatch(id, h, a, htH, htA),
       (id, htH, htA) => applyHalfTime(id, htH, htA)
     );
     let reports = null;
     try { reports = (await generatePending({ budgetMs: 50000 })).generated; } catch (_) {}
-    res.json({ ok: true, matches: m.count ?? null, settled: r.settled ?? null, iyFixed: r.iyFixed ?? null, reports });
+    // Raporlar üretildikten SONRA bot, o maçların raporuna göre kuponunu yapar.
+    let bot = null;
+    try { bot = await botSync(); } catch (e) { console.error('[bot] sync', e.message); }
+    res.json({ ok: true, matches: m.count ?? null, settled: r.settled ?? null, iyFixed: r.iyFixed ?? null, reports, botPlaced: bot ? bot.placed : null });
   } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 
