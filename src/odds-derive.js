@@ -176,6 +176,27 @@ function computeMarkets(base) {
   for (const k of Object.keys(iymsP)) iyms[k] = price(iymsP[k], 0.14);
   mk.iyms = iyms;
 
+  // --- Hangi yarida daha cok gol? (ev / deplasman / toplam) ---
+  // H1 (1. yari) ve H2 (2. yari) bagimsiz devre matrisleri (yukarida kuruldu).
+  // Ortak olasilikla her yari ciftinde hangi yarinin daha cok gol icerdigi toplanir.
+  const hmH = { '1y': 0, '2y': 0, esit: 0 }; // ev sahibi hangi yari
+  const hmA = { '1y': 0, '2y': 0, esit: 0 }; // deplasman hangi yari
+  const hmT = { '1y': 0, '2y': 0, esit: 0 }; // macta hangi yari (toplam)
+  for (let h1 = 0; h1 <= MAX; h1++) for (let a1 = 0; a1 <= MAX; a1++) {
+    const p1 = H1[h1][a1]; if (!p1) continue;
+    for (let h2 = 0; h2 <= MAX; h2++) for (let a2 = 0; a2 <= MAX; a2++) {
+      const p = p1 * H2[h2][a2]; if (!p) continue;
+      hmH[h1 > h2 ? '1y' : h1 < h2 ? '2y' : 'esit'] += p;
+      hmA[a1 > a2 ? '1y' : a1 < a2 ? '2y' : 'esit'] += p;
+      const t1 = h1 + a1, t2 = h2 + a2;
+      hmT[t1 > t2 ? '1y' : t1 < t2 ? '2y' : 'esit'] += p;
+    }
+  }
+  const hmPrice = (o) => ({ '1y': price(o['1y'], 0.12), '2y': price(o['2y'], 0.12), esit: price(o.esit, 0.12) });
+  mk.half_more_h = hmPrice(hmH);
+  mk.half_more_a = hmPrice(hmA);
+  mk.half_more_t = hmPrice(hmT);
+
   // --- Kesin Skor ---
   const cs = {};
   let listed = 0;

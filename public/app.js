@@ -131,6 +131,11 @@ const MARKET_GROUPS = [
     { key: 'iy_ou15', label: 'İlk Yarı Alt/Üst 1.5', cols: 2, sels: [['over', '1.5 Üst'], ['under', '1.5 Alt']] },
     { key: 'iy_btts', label: 'İlk Yarı Karşılıklı Gol', cols: 2, sels: [['yes', 'KG Var'], ['no', 'KG Yok']] },
   ] },
+  { title: 'Hangi Yarı Daha Çok Gol?', open: false, markets: [
+    { key: 'half_more_h', label: 'Ev Sahibi Hangi Yarı', cols: 3, sels: [['1y', 'İlk Yarı'], ['2y', 'İkinci Yarı'], ['esit', 'Eşit']] },
+    { key: 'half_more_a', label: 'Deplasman Hangi Yarı', cols: 3, sels: [['1y', 'İlk Yarı'], ['2y', 'İkinci Yarı'], ['esit', 'Eşit']] },
+    { key: 'half_more_t', label: 'Maçta Hangi Yarı', cols: 3, sels: [['1y', 'İlk Yarı'], ['2y', 'İkinci Yarı'], ['esit', 'Eşit']] },
+  ] },
   { title: 'Takım Golleri', open: false, markets: [
     { key: 'h_ou05', label: 'Ev Sahibi Alt/Üst 0.5', cols: 2, sels: [['over', '0.5 Üst'], ['under', '0.5 Alt']] },
     { key: 'h_ou15', label: 'Ev Sahibi Alt/Üst 1.5', cols: 2, sels: [['over', '1.5 Üst'], ['under', '1.5 Alt']] },
