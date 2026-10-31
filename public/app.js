@@ -1516,10 +1516,11 @@ async function renderAdmin(el) {
     <div class="card">
       <h3>🤖 Premier Lig Bot</h3>
       <p style="color:var(--muted);font-size:13px;line-height:1.5;margin-bottom:10px">
-        Bot oyuncu, <b>yalnızca saha raporu üretilen maçlara</b> sabit 100 ASCU yatırır — rapor maç günü gece 00:00'da üretildiği için bot da o an, güncel ihtimallere göre kupon yapar (geleceğe dönük erken bahis yok). Seçimi, raporun sonucu olan <b>en uygun (en yüksek ihtimalli)</b> bahistir: <b>tüm pazarlar</b> (maç sonucu, alt/üst, KG, ilk/ikinci yarı, hangi yarı çok gol, takım golleri, kombinasyonlar…) birlikte değerlendirilir; "Toplam 0.5 Üst / Çifte Şans" gibi neredeyse kesin değersiz bahisler elenip en olası anlamlı bahis oynanır. Başlangıç bakiyesi 12500. Aşağıdaki düğme botu <b>temiz yeniden kurar</b>: tüm kuponlarını silip bakiyeyi sıfırlar ve yalnızca raporu olan maçlara yeniden oynar (yanlış/erken geçmişi temizler).
+        Bot oyuncu, <b>yalnızca saha raporu üretilen maçlara</b> sabit 100 ASCU yatırır — rapor maç günü gece 00:00'da üretildiği için bot da o an, güncel ihtimallere göre kupon yapar (geleceğe dönük erken bahis yok). Seçimi, raporun sonucu olan <b>en uygun</b> bahistir: <b>tüm pazarlar</b> (maç sonucu, alt/üst, KG, ilk/ikinci yarı, hangi yarı çok gol, takım golleri, kombinasyonlar…) değerlendirilir ve <b>yüksek oran + yüksek garanti</b> dengesi kurulur — belirli bir oran bandı (varsayılan 1.50–2.30) içindeki en garanti bahis seçilir. "Toplam 0.5 Üst / Çifte Şans" gibi değersiz bahisler ile fazla riskli longshot'lar elenir. Başlangıç bakiyesi 12500. Aşağıdaki düğme botu <b>temiz yeniden kurar</b>: tüm kuponlarını silip bakiyeyi sıfırlar ve yalnızca raporu olan maçlara yeniden oynar (yanlış/erken geçmişi temizler).
       </p>
       <div class="admin-tools" style="margin-bottom:6px">
         <button class="btn-sm btn-blue" id="bot-sync">🤖 Botu Yeniden Kur</button>
+        <button class="btn-sm" id="bot-audit" style="background:var(--bg);border:1px solid var(--line);color:var(--ink)">🔍 Bakiye Denetle</button>
       </div>
       <div id="bot-msg" style="margin:6px 0 2px;font-size:13px;color:var(--muted)"></div>
     </div>
@@ -1708,6 +1709,27 @@ async function renderAdmin(el) {
       bm.style.color = 'var(--ok)';
       bm.textContent = `Bot yeniden kuruldu: ${r.placed || 0} kupon yapıldı (${r.graded || 0} geçmiş maç notlandı). Raporu olan maç: ${r.reportedMatches ?? '?'}. Bakiye: ${r.botBalance != null ? fmtTL(r.botBalance) : '?'}.` + ((r.reportedMatches === 0) ? ' Henüz raporu olan maç yok; bot da bu yüzden kupon yapmadı. Önce "Eksik Raporları Üret"e bas.' : '');
       toast('Bot yeniden kuruldu — "Oyuncular" sekmesinden durumunu görebilirsin');
+    } catch (e) { bm.style.color = 'var(--danger)'; bm.textContent = e.message; }
+    finally { btn.disabled = false; btn.textContent = old; }
+  });
+
+  if ($('#bot-audit')) $('#bot-audit').addEventListener('click', async () => {
+    const btn = $('#bot-audit'); const bm = $('#bot-msg');
+    if (btn.disabled) return;
+    btn.disabled = true; const old = btn.textContent; btn.textContent = 'Denetleniyor…';
+    bm.style.color = 'var(--muted)'; bm.textContent = 'Bot bakiyesi kuponlardan hesaplanıyor…';
+    try {
+      const r = await api('/admin/bot-audit');
+      if (!r.ok) { bm.style.color = 'var(--danger)'; bm.textContent = r.error || 'Denetim başarısız.'; return; }
+      const bs = r.byStatus || {};
+      const line = (k, lbl) => bs[k] ? `${lbl}: ${bs[k].n}` : `${lbl}: 0`;
+      bm.style.color = r.drift ? 'var(--danger)' : 'var(--ok)';
+      bm.innerHTML = `<b>Kayıtlı bakiye:</b> ${fmtTL(r.storedBalance)}<br>`
+        + `<b>Hesaplanan (doğru) bakiye:</b> ${fmtTL(r.computedBalance)}<br>`
+        + `<b>Fark:</b> ${fmtTL(r.diff)} ${r.drift ? '⚠️ SAPMA' : '✅ tutarlı'}<br>`
+        + `<b>Net kâr/zarar:</b> ${fmtTL(r.netProfit)} (başlangıç ${fmtTL(r.start)})<br>`
+        + `Kupon: ${r.totalCoupons} — ${line('won','Kazanan')}, ${line('lost','Kaybeden')}, ${line('pending','Bekleyen')}, ${line('void','İptal')}<br>`
+        + `<span style="color:var(--muted)">${r.note}</span>`;
     } catch (e) { bm.style.color = 'var(--danger)'; bm.textContent = e.message; }
     finally { btn.disabled = false; btn.textContent = old; }
   });

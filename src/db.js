@@ -28,7 +28,7 @@ function ensureAdmin() {
   adminReady = (async () => {
     const username = process.env.ADMIN_USERNAME || 'admin';
     const password = process.env.ADMIN_PASSWORD || 'admin1234';
-    const startBalance = Number(process.env.START_BALANCE || 1000);
+    const startBalance = Number(process.env.START_BALANCE || 12500);
     const rows = await sql`SELECT id FROM users WHERE username = ${username}`;
     if (rows.length === 0) {
       const hash = bcrypt.hashSync(password, 10);

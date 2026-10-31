@@ -15,7 +15,7 @@ const { computeMarkets } = require('../src/odds-derive');
 
 const app = express();
 const SECRET = process.env.SESSION_SECRET || 'lutfen-bu-anahtari-degistir';
-const START_BALANCE = Number(process.env.START_BALANCE || 1000);
+const START_BALANCE = Number(process.env.START_BALANCE || 12500);
 // KURAL 1: Her maca en az bu kadar ASCU ile kupon yapilabilir.
 const MIN_STAKE = Number(process.env.MIN_STAKE || 50);
 // KURAL 2: Turnuva bu tarihte biter; bu andan sonra yeni kupon yapilamaz.
@@ -798,6 +798,44 @@ app.post('/api/admin/matches/:id/void', requireAdmin, async (req, res) => {
 app.post('/api/admin/bot-sync', requireAdmin, async (req, res) => {
   try { res.json(await botSync({ rebuild: true })); }
   catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+
+// PREMİER LİG BOT: bakiye DENETİMİ (hicbir sey degistirmez). Botun bakiyesini
+// kuponlarindan sifirdan hesaplar ve kayitli bakiyeyle karsilastirir:
+//   dogru_bakiye = START - Σstake(tum) + Σpotential_win(kazanan) + Σstake(iptal)
+// diff != 0 ise bir sapma var demektir (eski surum/cift sayim); "Botu Yeniden Kur" duzeltir.
+app.get('/api/admin/bot-audit', requireAdmin, async (req, res) => {
+  try {
+    const [bot] = await sql`SELECT id, balance FROM users WHERE is_bot=true ORDER BY id ASC LIMIT 1`;
+    if (!bot) return res.json({ ok: false, error: 'Bot bulunamadi. Once "Botu Yeniden Kur".' });
+    const agg = await sql`
+      SELECT status, COUNT(*)::int AS n,
+        COALESCE(SUM(stake),0) AS stake, COALESCE(SUM(potential_win),0) AS pw
+      FROM coupons WHERE user_id=${bot.id} GROUP BY status`;
+    const by = {};
+    let totalStake = 0, wonPw = 0, voidStake = 0, totalCoupons = 0;
+    for (const r of agg) {
+      const n = Number(r.n), stake = Number(r.stake), pw = Number(r.pw);
+      by[r.status] = { n, stake, potential_win: pw };
+      totalStake += stake; totalCoupons += n;
+      if (r.status === 'won') wonPw += pw;
+      if (r.status === 'void') voidStake += stake;
+    }
+    const start = START_BALANCE;
+    const computed = Math.round((start - totalStake + wonPw + voidStake) * 100) / 100;
+    const stored = Math.round(Number(bot.balance) * 100) / 100;
+    const diff = Math.round((stored - computed) * 100) / 100;
+    // Net kar/zarar = dogru_bakiye - baslangic
+    const netProfit = Math.round((computed - start) * 100) / 100;
+    res.json({
+      ok: true, start, storedBalance: stored, computedBalance: computed, diff,
+      drift: Math.abs(diff) >= 0.01, totalCoupons, netProfit,
+      byStatus: by,
+      note: Math.abs(diff) >= 0.01
+        ? 'SAPMA VAR: kayitli bakiye kuponlardan hesaplanan ile tutmuyor. "Botu Yeniden Kur" ile duzelir.'
+        : 'Bakiye kuponlarla tutarli (dogru).',
+    });
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 
 // Mevcut ACIK maclarin markets verisini, SAKLANAN 1X2 + Alt/Ust oranlarindan

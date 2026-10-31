@@ -156,11 +156,13 @@ async function settleMatch(matchId, homeScore, awayScore, htHome = null, htAway 
 
     // KURAL 3: Bu maca hic kupon yapmamis onayli oyunculardan katilim cezasi dus.
     // Admin de oyuncu sayilir. Yalnizca ILK sonuclandirmada uygulanir; duzeltmede tekrar uygulanmaz.
+    // ISTISNA: PREMİER LİG BOT bu cezadan MUAF. Bot yalnizca raporu olan maclara oynar;
+    // raporu olmayan maclara oynamamasi dogaldir, ceza yememeli (is_bot=true haric tutulur).
     const penalty = Number(process.env.NO_BET_PENALTY || 100);
     if (penalty > 0 && !(wasSettled && correct)) {
       await tx`
         UPDATE users SET balance = GREATEST(balance - ${penalty}, 0)
-        WHERE status='approved'
+        WHERE status='approved' AND COALESCE(is_bot, false) = false
           AND id NOT IN (SELECT user_id FROM coupons WHERE match_id=${matchId})`;
     }
 

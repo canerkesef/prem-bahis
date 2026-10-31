@@ -901,7 +901,7 @@ async function generateReportFor(match) {
       report.pick = { market: pk.market, selection: pk.selection, odd: pk.odd, label: pk.label, prob: pk.prob, src: pk.src };
       report.conclusion = {
         title: pk.label,
-        note: `Tüm kriterler arasında en yüksek ihtimal: ${pk.label} (yaklaşık %${pk.prob}, oran ${pk.odd.toFixed(2)}).`,
+        note: `Tüm pazarların sentezi — yüksek oran ve yüksek garanti dengesi: ${pk.label} (yaklaşık %${pk.prob} ihtimal, oran ${pk.odd.toFixed(2)}).`,
       };
     }
   } catch (e) { /* pick zorunlu değil */ }

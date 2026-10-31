@@ -7,13 +7,14 @@
 //  o an, güncel ihtimallere göre kupon yapar — geleceğe dönük erken bahis YOK).
 //  Başlangıç bakiyesi gerçek oyuncularla aynıdır (START_BALANCE, varsayılan 12500).
 //
-//  SEÇİM (EN UYGUN BAHİS): Bot, TÜM pazarları birlikte değerlendirir — maç sonucu,
-//  çifte şans, handikap, toplam/takım alt-üst, KG, kombinasyonlar, ilk yarı, ikinci
-//  yarı, hangi yarıda daha çok gol — ve aralarından EN YÜKSEK ihtimalli (en düşük
-//  oranlı) seçimi oynar. Neredeyse kesin/değersiz bahisler (oran < BOT_MIN_ODD, ör.
-//  "Toplam 0.5 Üst", "Çifte Şans") elenir; böylece seçim anlamlı ve çeşitli kalır.
-//  Bu seçim raporun "Sonuç" kısmı olarak yazılır (generateReportFor) ve report.pick
-//  olarak damgalanır; bot tam da onu oynar. Seçim DETERMİNİSTİKtir.
+//  SEÇİM (SENTEZ — yüksek oran + yüksek garanti): Bot, TÜM pazarları birlikte
+//  değerlendirir (maç sonucu, toplam/takım alt-üst, KG, kombinasyonlar, ilk yarı,
+//  ikinci yarı, hangi yarıda daha çok gol) ve bir ORAN BANDI [BOT_MIN_ODD, BOT_MAX_ODD]
+//  içindeki EN GARANTİ (en düşük oranlı) seçimi oynar. Band ALTI değersiz bahisler
+//  ("0.5 gol üstü", "Çifte Şans" vb.) ELENİR — bot bir daha salak gibi 0.5 üstü oynamaz;
+//  band ÜSTÜ fazla riskli longshot'lar da elenir. Böylece gerçek kazanç getiren ama
+//  hâlâ en olası bahis seçilir. Bu seçim raporun "Sonuç" kısmıdır (generateReportFor,
+//  report.pick) ve bot tam da onu oynar. Seçim DETERMİNİSTİKtir.
 //
 //  botSync(): bot kullanıcısını oluşturur (yoksa) ve bot kuponu olmayan tüm
 //  maçlara kuponunu yerleştirir. Maç zaten sonuçlanmışsa kuponu anında
@@ -85,30 +86,41 @@ const BOT_CANDIDATES = [
 ];
 
 // Neredeyse kesin/değersiz bahisleri eler: oranı bu tabanın ALTINDA olan adaylar
-// değerlendirmeye alınmaz (ör. "Toplam 0.5 Üst", "Çifte Şans"). Böylece en yüksek
-// ihtimal yine seçilir ama anlamlı/çeşitli kalır. Env ile ayarlanabilir.
-const BOT_MIN_ODD = Number(process.env.BOT_MIN_ODD || 1.25);
+// ORAN BANDI: "yüksek oran ama yüksek garanti" sentezi için bir aralık.
+// - Band ALTI (< MIN): neredeyse kesin, değersiz bahisler (ör. "Toplam 0.5 Üst",
+//   "0.5 gol üstü", "Çifte Şans") — bunlar ELENİR, bot bir daha salak gibi 0.5 üstü oynamaz.
+// - Band ÜSTÜ (> MAX): fazla riskli/şansa bağlı longshot'lar — bunlar da elenir.
+// - Band İÇİ: gerçek kazanç getiren ama hâlâ en olası bahis. Env ile ayarlanabilir.
+const BOT_MIN_ODD = Number(process.env.BOT_MIN_ODD || 1.50);
+const BOT_MAX_ODD = Number(process.env.BOT_MAX_ODD || 2.30);
 
-// EN UYGUN BAHİS: tüm aday pazarlar arasında, oran tabanını geçenler içinden EN DÜŞÜK
-// oranlı (en yüksek ihtimalli) seçimi döndürür. Oranlar aynı Poisson modelinden geldiği
-// için pazarlar arası karşılaştırma tutarlıdır. Döner: {market, selection, odd, label, prob}.
+// EN UYGUN BAHİS (sentez): tüm pazarlar değerlendirilir; [MIN, MAX] bandı içindeki
+// EN DÜŞÜK oranlı (= en garanti) seçim alınır — yani anlamlı kazançlı ama en olası bahis.
+// Band boşsa: banda EN YAKIN seçime düşülür (önce banda yakın band-altı = en az değersiz,
+// yoksa banda yakın band-üstü = en güvenli longshot). Döner: {market, selection, odd, label, prob}.
 function bestPick(markets) {
   const mk = parseMk(markets);
   if (!mk) return null;
-  let best = null;        // tabanı geçen en iyi
-  let fallback = null;    // hiçbiri tabanı geçmezse: genel en düşük oran
+  let inBand = null;    // band içinde en düşük oran (en garanti)
+  let below = null;     // band altında en YÜKSEK oran (banda en yakın, en az değersiz)
+  let above = null;     // band üstünde en DÜŞÜK oran (banda en yakın, en güvenli longshot)
   BOT_CANDIDATES.forEach(([market, selection, label]) => {
     const o = mk[market] && num(mk[market][selection]);
     if (!o) return;
-    if (!fallback || o < fallback.odd - 1e-9) fallback = { market, selection, odd: o, label };
-    if (o < BOT_MIN_ODD) return; // değersiz/kesin bahis -> ele
-    if (!best || o < best.odd - 1e-9) best = { market, selection, odd: o, label };
+    const cand = { market, selection, odd: o, label };
+    if (o >= BOT_MIN_ODD && o <= BOT_MAX_ODD) {
+      if (!inBand || o < inBand.odd - 1e-9) inBand = cand;
+    } else if (o < BOT_MIN_ODD) {
+      if (!below || o > below.odd + 1e-9) below = cand;
+    } else {
+      if (!above || o < above.odd - 1e-9) above = cand;
+    }
   });
-  const pick = best || fallback;
+  const pick = inBand || below || above;
   if (!pick) return null;
   return {
     market: pick.market, selection: pick.selection, odd: pick.odd,
-    label: pick.label, prob: Math.round(100 / pick.odd), src: 'en-iyi-ihtimal',
+    label: pick.label, prob: Math.round(100 / pick.odd), src: 'sentez',
   };
 }
 
