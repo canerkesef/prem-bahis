@@ -322,18 +322,29 @@ app.post('/api/report/:id', reportAuth, async (req, res) => {
     if (!report || typeof report !== 'object') return res.status(400).json({ error: 'Gecersiz rapor.' });
     const upd = await sql`UPDATE matches SET report=${JSON.stringify(report)}::jsonb, report_at=now() WHERE id=${req.params.id} RETURNING id`;
     if (!upd.length) return res.status(404).json({ error: 'Mac bulunamadi.' });
+    // Rapor yazıldı -> bot bu maça kuponunu yapar.
+    try { await botSync(); } catch (e) { console.error('[bot] sync', e.message); }
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 
 // AI ile rapor üretimi: admin elle tetikler (test/ilk doldurma).
 app.post('/api/admin/generate-reports', requireAdmin, async (req, res) => {
-  try { res.json(await generatePending({ budgetMs: 55000 })); }
+  try {
+    const r = await generatePending({ budgetMs: 55000 });
+    // Yeni rapor üretildiyse bot o maçlara kuponunu yapar.
+    if (r && r.generated > 0) { try { await botSync(); } catch (e) { console.error('[bot] sync', e.message); } }
+    res.json(r);
+  }
   catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 // TEK TUS: tum yaklasan maclarin raporunu yeniden uret (mevcut olani da gunceller).
 app.post('/api/admin/refresh-reports', requireAdmin, async (req, res) => {
-  try { res.json(await regenerateReports({ budgetMs: 55000 })); }
+  try {
+    const r = await regenerateReports({ budgetMs: 55000 });
+    if (r && r.generated > 0) { try { await botSync(); } catch (e) { console.error('[bot] sync', e.message); } }
+    res.json(r);
+  }
   catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 // Admin tani: API-Football anahtarinin plani ve maca dair gercek yaniti gosterir.
@@ -347,7 +358,12 @@ app.get('/api/admin/apifootball-check', requireAdmin, async (req, res) => {
 });
 // Kullanim-tetiklemeli üretim (fire-and-forget; kilitli, bütçeli).
 app.post('/api/generate-report', requireAuth, async (req, res) => {
-  try { res.json(await generatePending({ budgetMs: 45000 })); }
+  try {
+    const r = await generatePending({ budgetMs: 45000 });
+    // Yeni rapor üretildiyse bot o maçlara kuponunu yapar (maç günü gündeme göre).
+    if (r && r.generated > 0) { try { await botSync(); } catch (e) { console.error('[bot] sync', e.message); } }
+    res.json(r);
+  }
   catch (e) { res.json({ ok: false, error: String(e.message || e) }); }
 });
 
@@ -358,6 +374,8 @@ app.post('/api/admin/report/:id', requireAdmin, async (req, res) => {
     if (!report || typeof report !== 'object') return res.status(400).json({ error: 'Gecersiz rapor (JSON bekleniyor).' });
     const upd = await sql`UPDATE matches SET report=${JSON.stringify(report)}::jsonb, report_at=now() WHERE id=${req.params.id} RETURNING id`;
     if (!upd.length) return res.status(404).json({ error: 'Mac bulunamadi.' });
+    // Rapor yazıldı -> bot bu maça kuponunu yapar.
+    try { await botSync(); } catch (e) { console.error('[bot] sync', e.message); }
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });

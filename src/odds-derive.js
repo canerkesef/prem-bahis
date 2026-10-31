@@ -220,6 +220,17 @@ function computeMarkets(base) {
   mk.iy_ou15 = { over: iyPrice(HT((i, j) => i + j > 1.5)), under: iyPrice(HT((i, j) => i + j < 1.5)) };
   mk.iy_btts = { yes: iyPrice(HT((i, j) => i > 0 && j > 0)), no: iyPrice(HT((i, j) => !(i > 0 && j > 0))) };
 
+  // --- Ikinci Yari (devre arasi sonrasi) --- gol beklentisi ~%55; ayri matris.
+  // Sonuclandirma: 2. yari golu = mac sonu - devre (settle.js sh_ pazarlarini boyle hesaplar).
+  const SH = makeP(lh * 0.55, la * 0.55);
+  const shPrice = (p) => price(p, 0.16);
+  mk.sh_1x2 = {
+    '1': shPrice(SH((i, j) => i > j)), X: shPrice(SH((i, j) => i === j)), '2': shPrice(SH((i, j) => i < j)),
+  };
+  mk.sh_ou05 = { over: shPrice(SH((i, j) => i + j > 0.5)), under: shPrice(SH((i, j) => i + j < 0.5)) };
+  mk.sh_ou15 = { over: shPrice(SH((i, j) => i + j > 1.5)), under: shPrice(SH((i, j) => i + j < 1.5)) };
+  mk.sh_btts = { yes: shPrice(SH((i, j) => i > 0 && j > 0)), no: shPrice(SH((i, j) => !(i > 0 && j > 0))) };
+
   return two(mk);
 }
 

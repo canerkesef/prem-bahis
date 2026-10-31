@@ -131,6 +131,12 @@ const MARKET_GROUPS = [
     { key: 'iy_ou15', label: 'İlk Yarı Alt/Üst 1.5', cols: 2, sels: [['over', '1.5 Üst'], ['under', '1.5 Alt']] },
     { key: 'iy_btts', label: 'İlk Yarı Karşılıklı Gol', cols: 2, sels: [['yes', 'KG Var'], ['no', 'KG Yok']] },
   ] },
+  { title: 'İkinci Yarı', open: false, markets: [
+    { key: 'sh_1x2', label: 'İkinci Yarı Sonucu', cols: 3, sels: [['1', 'Ev (1)'], ['X', 'Berabere (X)'], ['2', 'Dep (2)']] },
+    { key: 'sh_ou05', label: 'İkinci Yarı Alt/Üst 0.5', cols: 2, sels: [['over', '0.5 Üst'], ['under', '0.5 Alt']] },
+    { key: 'sh_ou15', label: 'İkinci Yarı Alt/Üst 1.5', cols: 2, sels: [['over', '1.5 Üst'], ['under', '1.5 Alt']] },
+    { key: 'sh_btts', label: 'İkinci Yarı Karşılıklı Gol', cols: 2, sels: [['yes', 'KG Var'], ['no', 'KG Yok']] },
+  ] },
   { title: 'Hangi Yarı Daha Çok Gol?', open: false, markets: [
     { key: 'half_more_h', label: 'Ev Sahibi Hangi Yarı', cols: 3, sels: [['1y', 'İlk Yarı'], ['2y', 'İkinci Yarı'], ['esit', 'Eşit']] },
     { key: 'half_more_a', label: 'Deplasman Hangi Yarı', cols: 3, sels: [['1y', 'İlk Yarı'], ['2y', 'İkinci Yarı'], ['esit', 'Eşit']] },
@@ -1510,7 +1516,7 @@ async function renderAdmin(el) {
     <div class="card">
       <h3>🤖 Premier Lig Bot</h3>
       <p style="color:var(--muted);font-size:13px;line-height:1.5;margin-bottom:10px">
-        Bot oyuncu, <b>yalnızca saha raporu üretilen maçlara</b> sabit 100 ASCU yatırır — rapor maç günü gece 00:00'da üretildiği için bot da o an, güncel ihtimallere göre kupon yapar (geleceğe dönük erken bahis yok). Seçimi, raporun sonucu olan <b>en yüksek ihtimalli (en tutarlı oranlı)</b> tahmindir: maç sonucu (1-X-2), 2.5 Alt/Üst ve KG birlikte değerlendirilip en olası olan oynanır. Başlangıç bakiyesi 12500. Aşağıdaki düğme botu <b>temiz yeniden kurar</b>: tüm kuponlarını silip bakiyeyi sıfırlar ve yalnızca raporu olan maçlara yeniden oynar (yanlış/erken geçmişi temizler).
+        Bot oyuncu, <b>yalnızca saha raporu üretilen maçlara</b> sabit 100 ASCU yatırır — rapor maç günü gece 00:00'da üretildiği için bot da o an, güncel ihtimallere göre kupon yapar (geleceğe dönük erken bahis yok). Seçimi, raporun sonucu olan <b>en uygun (en yüksek ihtimalli)</b> bahistir: <b>tüm pazarlar</b> (maç sonucu, alt/üst, KG, ilk/ikinci yarı, hangi yarı çok gol, takım golleri, kombinasyonlar…) birlikte değerlendirilir; "Toplam 0.5 Üst / Çifte Şans" gibi neredeyse kesin değersiz bahisler elenip en olası anlamlı bahis oynanır. Başlangıç bakiyesi 12500. Aşağıdaki düğme botu <b>temiz yeniden kurar</b>: tüm kuponlarını silip bakiyeyi sıfırlar ve yalnızca raporu olan maçlara yeniden oynar (yanlış/erken geçmişi temizler).
       </p>
       <div class="admin-tools" style="margin-bottom:6px">
         <button class="btn-sm btn-blue" id="bot-sync">🤖 Botu Yeniden Kur</button>
@@ -1700,7 +1706,7 @@ async function renderAdmin(el) {
       const r = await api('/admin/bot-sync', { method: 'POST' });
       if (r.error) { bm.style.color = 'var(--danger)'; bm.textContent = r.error; return; }
       bm.style.color = 'var(--ok)';
-      bm.textContent = `Bot yeniden kuruldu: ${r.placed || 0} kupon (raporlu maçlar), ${r.graded || 0} geçmiş maç notlandı${r.removed ? `, ${r.removed} erken bahis temizlendi` : ''}.`;
+      bm.textContent = `Bot yeniden kuruldu: ${r.placed || 0} kupon yapıldı (${r.graded || 0} geçmiş maç notlandı). Raporu olan maç: ${r.reportedMatches ?? '?'}. Bakiye: ${r.botBalance != null ? fmtTL(r.botBalance) : '?'}.` + ((r.reportedMatches === 0) ? ' Henüz raporu olan maç yok; bot da bu yüzden kupon yapmadı. Önce "Eksik Raporları Üret"e bas.' : '');
       toast('Bot yeniden kuruldu — "Oyuncular" sekmesinden durumunu görebilirsin');
     } catch (e) { bm.style.color = 'var(--danger)'; bm.textContent = e.message; }
     finally { btn.disabled = false; btn.textContent = old; }
