@@ -261,6 +261,16 @@ async function botSync(opts = {}) {
     }
   }
 
+  // KENDİNİ ONARAN BAKİYE: botun bakiyesini HER ZAMAN yalnızca kendi kuponlarından
+  // kanonik olarak yeniden hesapla. Böylece KURAL 3 cezası gibi DIŞ sapmalar (botun
+  // bakiyesini haksız düşüren) her senkronda otomatik silinir ve bakiye hep doğru kalır.
+  //   dogru = START − Σstake(tüm) + Σpotential_win(kazanan) + Σstake(iptal)
+  await sql`
+    UPDATE users SET balance = ${START_BALANCE}
+      - COALESCE((SELECT SUM(stake) FROM coupons WHERE user_id=${bot.id}), 0)
+      + COALESCE((SELECT SUM(potential_win) FROM coupons WHERE user_id=${bot.id} AND status='won'), 0)
+      + COALESCE((SELECT SUM(stake) FROM coupons WHERE user_id=${bot.id} AND status='void'), 0)
+    WHERE id=${bot.id}`;
   // Bot iflas ettiyse elenme bayrağını güncelle (KURAL 13 ile uyumlu).
   await sql`
     UPDATE users u SET eliminated =
